@@ -1,0 +1,443 @@
+% =====================================================================
+%  Chapitre 1 -- Fondements
+% =====================================================================
+\chapter{Du data warehouse au Lakehouse}\label{ch:fondements}
+\soustitre{Principes d'une plateforme de données moderne}
+
+\begin{objectifs}
+  \item distinguer les besoins transactionnels et analytiques d'une entreprise ;
+  \item expliquer les forces et les limites de l'entrepôt et du lac de données ;
+  \item décrire les composants d'un Lakehouse : stockage objet, formats ouverts, catalogue, moteurs ;
+  \item expliquer comment un format de table comme Iceberg apporte les transactions et l'historique ;
+  \item organiser les données en couches Bronze, Silver et Gold, et les modéliser en étoile ;
+  \item situer le traitement par lots et le traitement en continu, et les outils qui exploitent la plateforme.
+\end{objectifs}
+
+% =====================================================================
+\section{Deux usages des données}
+% =====================================================================
+
+Une entreprise de commerce en ligne enregistre chaque jour des milliers de commandes. L'application
+qui les reçoit doit répondre en quelques millisecondes à des opérations courtes et nombreuses :
+créer une commande, modifier une adresse, enregistrer un paiement. Ce sont des traitements
+\textbf{transactionnels}, dits \textbf{OLTP}\index{oltp@OLTP} (\emph{OnLine Transaction Processing}). Ils
+s'appuient sur une base relationnelle, comme PostgreSQL ou Oracle, organisée pour garantir la
+cohérence de chaque transaction.
+
+La direction, elle, pose d'autres questions : quel est le chiffre d'affaires par région et par
+mois ? Quels transporteurs livrent en retard ? Quels produits reçoivent les plus mauvais avis ?
+Ces requêtes \textbf{analytiques}, dites \textbf{OLAP}\index{olap@OLAP} (\emph{OnLine Analytical
+Processing}), lisent des millions de lignes, sur plusieurs années, pour en tirer quelques
+agrégats. Les exécuter sur la base de l'application la ralentirait, et cette base ne garde souvent
+que l'état présent des données, pas leur historique.
+
+\begin{table}[H]
+\centering\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+& \textbf{OLTP (transactionnel)} & \textbf{OLAP (analytique)} \\
+\midrule
+Question type & Enregistrer la commande n° 4521 & Chiffre d'affaires par mois et par région \\
+Volume lu par requête & quelques lignes & des millions de lignes \\
+Opérations & insertions et mises à jour fréquentes & lectures et agrégations \\
+Historique & état courant & plusieurs années \\
+Organisation & par ligne, normalisée & par colonne, souvent dénormalisée \\
+Utilisateurs & l'application, des milliers à la fois & analystes, tableaux de bord, modèles \\
+\bottomrule
+\end{tabularx}
+\caption{Les deux usages des données dans une entreprise.}
+\label{tab:oltp-olap}
+\end{table}
+
+Depuis les années 1990, on sépare donc les deux usages : les données sont copiées régulièrement de
+la base transactionnelle vers une plateforme dédiée à l'analyse. Ce chapitre retrace l'évolution de
+cette plateforme, de l'entrepôt de données au Lakehouse, puis présente les principes et les outils
+mis en œuvre dans le reste de l'ouvrage.
+
+% =====================================================================
+\section{L'entrepôt de données}
+% =====================================================================
+
+L'\textbf{entrepôt de données}\index{entrepot de donnees@entrepôt de données} (\emph{data warehouse}) est défini par
+\citet{inmon2005} comme une collection de données \og orientée sujet, intégrée, historisée et non
+volatile \fg{}, destinée à l'aide à la décision. Les données des différentes applications y sont
+extraites, nettoyées, rapprochées, puis chargées selon un schéma conçu pour l'analyse : c'est le
+processus \textbf{ETL}\index{etl@ETL} (\emph{Extract, Transform, Load}). \citet{kimball2013} a
+popularisé la \textbf{modélisation dimensionnelle}, présentée à la section~\ref{sec:dimensionnel},
+qui organise ces données en faits et en dimensions.
+
+L'entrepôt offre ce qu'attendent les analystes : du SQL, des performances prévisibles, des
+transactions et un schéma contrôlé. Mais il présente trois limites, devenues gênantes avec la
+croissance des volumes et la diversité des données :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{le coût} : stockage et calcul sont liés dans un même système, souvent propriétaire,
+        et facturés ensemble ;
+  \item \textbf{la rigidité} : seules les données structurées, conformes au schéma, y entrent. Les
+        textes, les images, les journaux d'événements restent à l'extérieur ;
+  \item \textbf{la fermeture} : les données sont stockées dans un format propre au moteur. Pour
+        entraîner un modèle d'apprentissage automatique, il faut les exporter.
+\end{itemize}
+
+% =====================================================================
+\section{Le lac de données}
+% =====================================================================
+
+À la fin des années 2000, l'écosystème Hadoop, puis les services de stockage objet du cloud comme
+Amazon S3, rendent le stockage massif très bon marché. L'idée du \textbf{lac de
+données}\index{lac de donnees@lac de données} (\emph{data lake}) en découle : stocker \emph{toutes} les données,
+dans leur format d'origine (fichiers CSV, JSON, images, journaux), et n'imposer un schéma qu'au
+moment de la lecture (\emph{schema-on-read}). Des moteurs de calcul distribué comme Apache
+Spark \citep{zaharia2016} traitent ensuite ces fichiers à grande échelle, et les équipes de science
+des données y accèdent directement.
+
+Le lac de données a toutefois perdu ce que l'entrepôt garantissait. Un ensemble de fichiers n'est
+pas une table : rien n'empêche deux programmes d'écrire en même temps, un traitement interrompu
+laisse des fichiers à moitié écrits, une erreur de format passe inaperçue, et il est impossible de
+revenir à l'état de la veille. Sans gouvernance, le lac devient un \og marécage \fg{} (\emph{data
+swamp}) où personne ne sait plus quelles données sont fiables.
+
+Beaucoup d'entreprises ont donc combiné les deux : un lac pour stocker et préparer, un entrepôt
+pour servir les tableaux de bord. Cette \textbf{architecture à deux niveaux} cumule les
+inconvénients : les données sont copiées deux fois, avec un décalage, des coûts doublés et un
+risque d'incohérence entre les deux systèmes \citep{armbrust2021}.
+
+% =====================================================================
+\section{Le Lakehouse}
+% =====================================================================
+
+Le \textbf{Lakehouse}\index{lakehouse@Lakehouse} réunit les deux approches. \citet{armbrust2021} le
+définissent comme un système de gestion de données fondé sur un stockage à faible coût, en formats
+ouverts et directement accessibles, qui offre en plus les fonctions de gestion et de performance
+d'un entrepôt : transactions ACID, versions des données, contrôle du schéma, indexation et
+optimisation des requêtes. Concrètement, il repose sur quatre briques
+(figure~\ref{fig:c1-briques}).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\sffamily\small, >=Stealth,
+  couche/.style={draw=lhfonce,line width=0.7pt,minimum width=12.6cm,minimum height=1.05cm,align=center},
+  et/.style={font=\sffamily\scriptsize,text=lhfonce,align=center}]
+\node[couche,fill=lhblue!12] (moteurs) at (0,3.6) {};
+\node[et,anchor=west,font=\sffamily\bfseries\small] at (-6.15,3.6) {Moteurs};
+\node at (1.2,3.6) {\logo[1.6em]{spark}\quad\logo[1.6em]{trino}\quad\logo[1.6em]{dbt}\quad\logo[1.5em]{superset}\quad\logo[1.5em]{kafka}};
+\node[couche,fill=lhvert!25] (cat) at (0,2.3) {};
+\node[et,anchor=west,font=\sffamily\bfseries\small] at (-6.15,2.3) {Catalogue};
+\node[et] at (1.2,2.3) {associe un nom de table (\texttt{silver.orders}) à ses métadonnées};
+\node[couche,fill=lhgold!25] (tab) at (0,1.0) {};
+\node[et,anchor=west,font=\sffamily\bfseries\small] at (-6.15,1.0) {Format de table};
+\node at (1.2,1.0) {\logo[1.6em]{iceberg}\quad\logo[1.6em]{delta}\quad\textcolor{lhfonce}{\scriptsize transactions, versions, schéma}};
+\node[couche,fill=lhsilver!20] (fic) at (0,-0.3) {};
+\node[et,anchor=west,font=\sffamily\bfseries\small] at (-6.15,-0.3) {Format de fichier};
+\node at (1.2,-0.3) {\logo[1.6em]{parquet}\quad\textcolor{lhfonce}{\scriptsize Parquet : stockage par colonnes, compressé}};
+\node[couche,fill=lhgray] (sto) at (0,-1.6) {};
+\node[et,anchor=west,font=\sffamily\bfseries\small] at (-6.15,-1.6) {Stockage objet};
+\node at (1.2,-1.6) {\logo[1.6em]{rustfs}\quad\textcolor{lhfonce}{\scriptsize compatible S3 : bon marché, illimité}};
+\end{tikzpicture}
+\caption{Les briques d'un Lakehouse. Chaque couche est ouverte et remplaçable : plusieurs moteurs
+lisent les mêmes tables, sans copie.}
+\label{fig:c1-briques}
+\end{figure}
+
+\subsection{Le stockage objet}
+
+Les données sont rangées dans un \textbf{stockage objet}\index{stockage objet} compatible avec
+l'interface S3 d'Amazon : chaque fichier est un objet, identifié par un chemin, dans un espace
+appelé \emph{bucket}. Ce stockage est peu coûteux, quasi illimité et indépendant des moteurs de
+calcul. Dans cet ouvrage, le service RustFS joue ce rôle sur la machine du lecteur.
+
+\subsection{Un format de fichier par colonnes}
+
+Les données tabulaires sont stockées au format \textbf{Parquet}\index{parquet@Parquet}, un format ouvert
+inspiré du système Dremel de Google \citep{melnik2010}. Au lieu de ranger les données ligne par
+ligne, comme un fichier CSV, Parquet les range \textbf{colonne par colonne}, par blocs. Une requête
+qui n'utilise que trois colonnes sur trente ne lit que ces trois colonnes. Des valeurs voisines
+d'une même colonne se ressemblent et se compressent bien. Enfin, chaque bloc conserve le minimum
+et le maximum de ses valeurs : un moteur peut ignorer les blocs qui ne contiennent pas la valeur
+cherchée.
+
+\subsection{Un format de table ouvert}\label{sec:c1-formats}
+
+Un dossier de fichiers Parquet n'est pas encore une table. Le \textbf{format de
+table}\index{format de table} ajoute une couche de métadonnées qui décrit, à chaque instant, quels
+fichiers composent la table. Trois formats ouverts dominent : Apache Iceberg, créé chez Netflix,
+Delta Lake, créé chez Databricks \citep{armbrust2020}, et Apache Hudi, créé chez Uber. Cet ouvrage
+utilise principalement Iceberg, et compare Iceberg et Delta Lake au chapitre~\ref{ch:tp1}.
+
+La figure~\ref{fig:c1-iceberg} montre l'organisation d'une table Iceberg \citep{icebergspec}.
+Chaque écriture produit un nouveau fichier de métadonnées, qui décrit un \textbf{instantané}
+(\emph{snapshot}\index{snapshot}) de la table : la liste de ses fichiers de données à ce moment-là,
+via des fichiers intermédiaires (\emph{manifests}). Les fichiers de données ne sont jamais
+modifiés : une mise à jour écrit de nouveaux fichiers, puis un nouvel instantané qui les
+référence. Le catalogue pointe vers le fichier de métadonnées courant, et la bascule d'un
+instantané au suivant est \textbf{atomique}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\sffamily\footnotesize, >=Stealth,
+  b/.style={draw=lhfonce,line width=0.6pt,rounded corners=2pt,align=center,inner sep=4pt,fill=#1},
+  et/.style={font=\sffamily\scriptsize,text=lhfonce,align=center}]
+\node[b=lhvert!25] (cat) at (0,0) {Catalogue\\\texttt{silver.orders}};
+\node[b=lhgold!25] (m1) at (-2.6,-1.7) {\texttt{v1.metadata.json}\\instantané 1};
+\node[b=lhgold!25] (m2) at (2.6,-1.7) {\texttt{v2.metadata.json}\\instantanés 1 et 2};
+\draw[->,thick,lhfonce] (cat) -- node[et,right=2pt]{version courante} (m2);
+\draw[->,lhfonce!50] (m2) -- node[et,above]{précédente} (m1);
+\node[b=lhblue!10] (l1) at (-2.6,-3.3) {liste de manifests 1};
+\node[b=lhblue!10] (l2) at (2.6,-3.3) {liste de manifests 2};
+\draw[->,lhfonce] (m1) -- (l1); \draw[->,lhfonce] (m2) -- (l2);
+\node[b=lhblue!5] (ma) at (-1.3,-4.8) {manifest A};
+\node[b=lhblue!5] (mb) at (2.6,-4.8) {manifest B};
+\draw[->,lhfonce] (l1) -- (ma); \draw[->,lhfonce] (l2) -- (ma); \draw[->,lhfonce] (l2) -- (mb);
+\foreach \x/\n in {-3.2/1,-1.3/2,0.6/3} {\node[b=lhsilver!20] (f\n) at (\x,-6.3) {\texttt{f\n.parquet}};}
+\node[b=lhsilver!20] (f4) at (2.6,-6.3) {\texttt{f4.parquet}};
+\draw[->,lhfonce] (ma) -- (f1); \draw[->,lhfonce] (ma) -- (f2); \draw[->,lhfonce] (ma) -- (f3);
+\draw[->,lhfonce] (mb) -- (f4);
+\node[et,anchor=west] at (4.1,-1.7) {métadonnées :\\schéma, partitions,\\historique};
+\node[et,anchor=west] at (4.1,-4.8) {liste des fichiers\\et statistiques};
+\node[et,anchor=west] at (4.1,-6.3) {données (Parquet),\\jamais modifiées};
+\end{tikzpicture}
+\caption{Une table Iceberg après deux écritures. L'instantané 2 réutilise les fichiers de
+l'instantané 1 et ajoute \texttt{f4.parquet} ; l'instantané 1 reste lisible.}
+\label{fig:c1-iceberg}
+\end{figure}
+
+Cette organisation apporte à de simples fichiers les garanties d'une base de données :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{des transactions ACID}\index{acid@ACID} : un lecteur voit soit l'ancien instantané, soit
+        le nouveau, jamais un état intermédiaire, et deux écritures concurrentes sont arbitrées ;
+  \item \textbf{le voyage dans le temps}\index{voyage dans le temps} (\emph{time travel}) : on
+        peut relire la table telle qu'elle était à un instantané passé, pour un audit ou pour
+        corriger une erreur ;
+  \item \textbf{l'évolution du schéma} : on ajoute ou renomme une colonne sans réécrire les données ;
+  \item \textbf{le partitionnement caché} : la table est découpée selon une colonne (un mois, un
+        vendeur), et une requête filtrée ne lit que les fichiers utiles.
+\end{itemize}
+
+En contrepartie, chaque écriture ajoute des fichiers et des métadonnées. Une table alimentée souvent
+accumule des \textbf{petits fichiers}\index{petits fichiers}, qu'il faut régulièrement
+\textbf{compacter}, et des instantanés anciens, qu'il faut \textbf{expirer}. Les chapitres~\ref{ch:tp3}
+et~\ref{ch:tp4} mesurent ce phénomène et le corrigent.
+
+\subsection{Un catalogue et plusieurs moteurs}
+
+Le \textbf{catalogue}\index{catalogue} associe le nom d'une table à son fichier de métadonnées
+courant. Tous les moteurs qui passent par le même catalogue voient donc la même version des
+données. Cet ouvrage utilise le catalogue REST d'Iceberg. En entreprise, ce rôle est tenu par AWS
+Glue, Unity Catalog, Polaris ou Nessie.
+
+C'est la clé de la \textbf{séparation du stockage et du calcul}\index{separation du stockage et du
+calcul@séparation du stockage et du
+calcul} : les données existent une seule fois, et plusieurs moteurs les utilisent selon leurs
+forces. Spark transforme de gros volumes, Trino répond aux requêtes interactives, dbt organise les
+transformations SQL, Superset construit les tableaux de bord. Chaque moteur se dimensionne, se met à
+jour ou se remplace sans toucher aux données.
+
+% =====================================================================
+\section{Organiser les données en couches}\label{sec:c1-medaillon}
+% =====================================================================
+
+Dans un Lakehouse, on ne transforme pas les données avant de les charger : on les charge d'abord
+telles qu'elles arrivent, puis on les transforme sur place. C'est l'approche
+\textbf{ELT}\index{elt@ELT} (\emph{Extract, Load, Transform}), rendue possible par le faible coût du
+stockage. Les données traversent alors trois couches successives, selon l'\textbf{architecture en
+médaillon}\index{architecture en medaillon@architecture en médaillon} (figure~\ref{fig:c1-medaillon}).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\sffamily\footnotesize, >=Stealth,
+  et/.style={font=\sffamily\scriptsize,text=lhfonce,align=center,text width=3.3cm}]
+\pic at (0,0) {fichier=CSV}; \pic at (0,-1.1) {fichier=\{ \}}; \pic at (0,-2.2) {photo};
+\node[et,text width=2cm] at (0,-3.1) {sources};
+\pic at (3.3,-1.1) {table=lhbronze}; \node[font=\sffamily\bfseries] at (3.3,-0.25) {Bronze};
+\pic at (7.3,-1.1) {table=lhsilver}; \node[font=\sffamily\bfseries] at (7.3,-0.25) {Silver};
+\pic at (11.3,-1.1) {table=lhgold};  \node[font=\sffamily\bfseries] at (11.3,-0.25) {Gold};
+\pic at (7.3,-3.0) {table=gray};     \node[et,anchor=west,text width=2cm] at (7.8,-3.0) {quarantaine};
+\draw[->,very thick,lhfonce] (0.6,-1.1) -- (2.75,-1.1);
+\draw[->,very thick,lhfonce] (3.85,-1.1) -- (6.75,-1.1);
+\draw[->,very thick,lhfonce] (7.85,-1.1) -- (10.75,-1.1);
+\draw[->,thick,lhfonce] (7.3,-1.65) -- (7.3,-2.45);
+\node[et] at (3.3,-2.4) {données brutes,\\telles que reçues,\\avec leur origine};
+\node[et] at (5.3,-4.1) {};
+\node[et] at (11.3,-2.4) {tables métier :\\faits, dimensions,\\indicateurs};
+\node[et,text width=2.6cm] at (5.3,-0.55) {typer, contrôler,\\dédoublonner};
+\node[et,text width=2.6cm] at (9.3,-0.55) {modéliser,\\agréger};
+\end{tikzpicture}
+\caption{L'architecture en médaillon. Les données invalides ne sont pas supprimées : elles sont
+mises en quarantaine, avec la raison de leur rejet.}
+\label{fig:c1-medaillon}
+\end{figure}
+
+\begin{description}[leftmargin=1.2em,itemsep=3pt]
+\item[Bronze] conserve les données \textbf{telles qu'elles sont arrivées}, avec leur origine et
+  leur date de chargement. Si une transformation se révèle fausse, on peut toujours la refaire à
+  partir de Bronze, sans redemander les données à la source.
+\item[Silver] contient des données \textbf{propres et fiables} : types explicites, valeurs
+  contrôlées, doublons écartés, schéma documenté. Les lignes qui ne respectent pas les règles vont
+  dans une table de \textbf{quarantaine}\index{quarantaine}, avec la raison de leur rejet, pour
+  qu'on puisse les examiner et corriger la source.
+\item[Gold] présente des tables \textbf{orientées métier}, prêtes pour l'analyse : tables de faits
+  et de dimensions, indicateurs agrégés, données préparées pour un modèle d'apprentissage.
+\end{description}
+
+Ce découpage rend chaque étape simple, testable et rejouable. Il sert de fil conducteur aux quatre
+travaux pratiques.
+
+% =====================================================================
+\section{La modélisation dimensionnelle}\label{sec:dimensionnel}
+% =====================================================================
+
+Une base transactionnelle est \textbf{normalisée} : chaque information n'y figure qu'une fois, pour
+éviter les incohérences lors des mises à jour. Cette organisation, idéale pour écrire, oblige à de
+nombreuses jointures pour analyser. La couche Gold adopte plutôt la \textbf{modélisation
+dimensionnelle}\index{modelisation dimensionnelle@modélisation dimensionnelle} de \citet{kimball2013} :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item une \textbf{table de faits}\index{table de faits} enregistre des événements mesurables (une
+        vente, un avis, une livraison), avec leurs mesures (montant, note, délai) et des clés vers
+        les dimensions ;
+  \item une \textbf{dimension}\index{dimension} décrit le contexte de ces événements : le client,
+        le produit, le vendeur, la date ;
+  \item la \textbf{granularité} d'une table de faits précise ce que représente une ligne (une ligne
+        de commande, un avis). C'est la première décision de conception.
+\end{itemize}
+
+Une table de faits entourée de ses dimensions forme un \textbf{schéma en étoile}\index{schema en
+etoile@schéma en
+étoile}. Plusieurs tables de faits qui partagent les mêmes dimensions (le même client, la même date)
+forment un \textbf{schéma en constellation}\index{schema en constellation@schéma en constellation}, que construit le
+chapitre~\ref{ch:tp2} avec l'outil dbt. Les dimensions partagées garantissent que toutes les
+analyses parlent du même client et du même calendrier.
+
+% =====================================================================
+\section{Au-delà des tables : texte, JSON et images}
+% =====================================================================
+
+Une grande part des données d'une entreprise n'est pas tabulaire. Le Lakehouse les accueille sans
+les transformer à l'entrée, puis en extrait des informations structurées :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item le \textbf{texte libre}, comme les avis clients, se nettoie et se transforme en indicateurs
+        ou en variables pour un modèle (chapitre~\ref{ch:tp2}) ;
+  \item les données \textbf{semi-structurées}, comme les messages JSON, ont une structure, mais
+        imbriquée et variable d'un message à l'autre. On les lit avec un schéma explicite, puis on
+        les aplatit en tables (chapitre~\ref{ch:tp2}) ;
+  \item les \textbf{images} sont stockées avec leurs octets, puis décrites par leurs dimensions, une
+        empreinte qui reconnaît les doublons et un \textbf{vecteur} calculé par un réseau de
+        neurones pré-entraîné \citep{howard2019}, qui résume ce qu'elles montrent
+        (chapitre~\ref{ch:tp3}).
+\end{itemize}
+
+% =====================================================================
+\section{Par lots ou en continu}\label{sec:c1-streaming}
+% =====================================================================
+
+Les données peuvent être traitées \textbf{par lots}\index{traitement par lots} (\emph{batch}) :
+à heure fixe, un traitement lit les données accumulées et produit un résultat complet. C'est simple
+et peu coûteux, mais le résultat a toujours le retard de l'intervalle entre deux lots. Le
+\textbf{traitement en continu}\index{streaming} (\emph{streaming}) traite au contraire chaque
+événement, ou chaque petit groupe d'événements, dès son arrivée.
+
+Le transport des événements est confié à un journal distribué comme \textbf{Apache
+Kafka}\index{kafka@Kafka} \citep{kreps2011}. Les événements y sont ajoutés à la fin d'un journal
+partitionné, numérotés, et conservés après lecture : plusieurs applications lisent ainsi le même
+flux, chacune à son rythme. Spark Structured Streaming \citep{armbrust2018} traite ensuite ce flux
+comme une table qui grandit sans fin, par \textbf{micro-lots}.
+
+Le modèle \emph{Dataflow} de \citet{akidau2015} a formalisé la principale difficulté du traitement
+en continu : les événements n'arrivent pas toujours dans l'ordre où ils se sont produits. Il faut
+distinguer l'\textbf{heure de l'événement}\index{heure de l'evenement@heure de l'événement} de l'heure de son
+traitement, et décider combien de temps attendre les retardataires, avec un
+\textbf{watermark}\index{watermark}. Ce choix règle un compromis entre la fraîcheur et l'exactitude
+des résultats \citep{akidau2018}. Le chapitre~\ref{ch:tp4} le met en œuvre, et compare les deux
+approches à partir de mesures.
+
+% =====================================================================
+\section{Exploiter la plateforme}
+% =====================================================================
+
+Une plateforme de données ne se limite pas au stockage et aux transformations. Cinq fonctions
+complètent l'architecture, et chacune fait l'objet d'une partie des travaux pratiques :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item l'\textbf{orchestration}\index{orchestration} enchaîne les traitements, selon un calendrier
+        ou un événement, les relance en cas d'erreur passagère et en garde l'historique (Airflow) ;
+  \item le \textbf{SQL interactif} et la \textbf{fédération} permettent aux analystes d'interroger
+        le Lakehouse, et d'autres bases, en une seule requête (Trino) ;
+  \item la \textbf{visualisation} met les indicateurs à la disposition des équipes métier (Superset,
+        Streamlit) ;
+  \item la \textbf{supervision} mesure l'état des services et déclenche des alertes (Prometheus,
+        Grafana) ;
+  \item l'\textbf{observabilité des données}\index{lineage} retrace l'origine de chaque table, son
+        \emph{lineage}, à partir des exécutions réelles (OpenLineage, Marquez).
+\end{itemize}
+
+% =====================================================================
+\section{Les outils de cet ouvrage}
+% =====================================================================
+
+Le tableau~\ref{tab:c1-outils} associe chaque fonction aux logiciels libres utilisés dans les
+travaux pratiques, et à des équivalents courants en entreprise. Les notions s'y transposent
+directement.
+
+\begin{table}[H]
+\centering\small
+\renewcommand{\arraystretch}{1.28}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X c@{}}
+\toprule
+\textbf{Fonction} & \textbf{Dans cet ouvrage} & \textbf{En entreprise} & \textbf{Chapitre} \\
+\midrule
+Stockage objet & RustFS (compatible S3) & Amazon S3, Azure Data Lake Storage & \ref{ch:environnement} \\
+Format de table & Apache Iceberg, Delta Lake & Iceberg, Delta Lake, Apache Hudi & \ref{ch:tp1} \\
+Catalogue & Iceberg REST & AWS Glue, Unity Catalog, Polaris & \ref{ch:tp1} \\
+Calcul & Apache Spark & Databricks, Amazon EMR, Snowflake & \ref{ch:tp1} \\
+Transformations SQL & dbt & dbt Cloud & \ref{ch:tp2} \\
+Orchestration & Apache Airflow & Airflow géré, Dagster, Prefect & \ref{ch:tp3} \\
+SQL interactif & Trino & Amazon Athena, Starburst & \ref{ch:tp3} \\
+Tableaux de bord & Apache Superset, Streamlit & Power BI, Tableau & \ref{ch:tp1}, \ref{ch:tp3} \\
+Supervision & Prometheus, Grafana & Datadog, CloudWatch & \ref{ch:tp3} \\
+Lineage & OpenLineage, Marquez & DataHub, Unity Catalog & \ref{ch:tp2}, \ref{ch:tp3} \\
+Flux d'événements & Apache Kafka & Confluent Cloud, Amazon MSK & \ref{ch:tp4} \\
+Traitement en continu & Spark Structured Streaming & Apache Flink, Kafka Streams & \ref{ch:tp4} \\
+\bottomrule
+\end{tabularx}
+\caption{Les fonctions d'une plateforme de données, et les outils qui les assurent.}
+\label{tab:c1-outils}
+\end{table}
+
+% =====================================================================
+\section{Le fil conducteur : Olist}
+% =====================================================================
+
+Tous les travaux pratiques portent sur la même entreprise : \textbf{Olist}\index{olist@Olist}, une place
+de marché brésilienne qui relie de petits vendeurs aux grands sites de commerce en ligne. Olist a
+publié un jeu de données réel et anonymisé d'environ 100\,000 commandes passées entre 2016 et 2018
+\citep{olist2018} : commandes, articles, paiements, clients, vendeurs, produits, et avis des clients
+en portugais. Les chapitres l'enrichissent progressivement de données reconstituées à partir de
+ces commandes (messages de suivi des colis, flux d'événements) et de photos de produits issues du
+jeu \emph{Amazon Berkeley Objects} \citep{collins2022}. L'annexe~\ref{ann:donnees} décrit ces
+données et leurs licences.
+
+Travailler sur une seule entreprise a un intérêt pédagogique : chaque nouveau besoin s'appuie sur
+ce qui a été construit avant, comme dans un vrai projet. Les tables Silver du chapitre~\ref{ch:tp1}
+alimentent la constellation du chapitre~\ref{ch:tp2}, que le pipeline automatisé du
+chapitre~\ref{ch:tp3} reconstruit chaque jour, et que le flux du chapitre~\ref{ch:tp4} complète en
+continu.
+
+\begin{aretenir}
+  \item Les usages transactionnels (OLTP) et analytiques (OLAP) demandent des systèmes différents.
+  \item L'entrepôt de données est fiable mais coûteux et fermé. Le lac de données est ouvert et bon
+        marché, mais sans garanties.
+  \item Le Lakehouse ajoute à un stockage objet en formats ouverts (Parquet) une couche de
+        métadonnées (Iceberg, Delta Lake) qui apporte transactions, versions et contrôle du schéma.
+  \item Un catalogue partagé permet à plusieurs moteurs d'utiliser les mêmes tables, sans copie.
+  \item Les données traversent trois couches : Bronze (brut), Silver (fiable), Gold (métier), et la
+        couche Gold adopte la modélisation dimensionnelle.
+  \item Le traitement en continu doit gérer le désordre des événements : le watermark règle le
+        compromis entre fraîcheur et exactitude.
+\end{aretenir}
+
+\begin{plusloin}
+L'article fondateur de \citet{armbrust2021} présente les motivations du Lakehouse, et celui de
+\citet{armbrust2020} le fonctionnement interne de Delta Lake. La spécification d'Iceberg
+\citep{icebergspec} détaille les métadonnées et les garanties de concurrence. Pour la modélisation
+dimensionnelle, l'ouvrage de \citet{kimball2013} reste la référence. \citet{kleppmann2017} offre
+une vue d'ensemble des systèmes de données, des bases transactionnelles aux flux, et
+\citet{reis2022} une introduction au métier d'ingénieur de données.
+\end{plusloin}

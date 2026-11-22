@@ -1,0 +1,30 @@
+% ---------------------------------------------------------------------
+%  Première de couverture : sobre, fond blanc, filet bleu à gauche
+%  Logo de l'université : images/um5.png
+% ---------------------------------------------------------------------
+\begin{titlepage}
+\begin{tikzpicture}[remember picture,overlay]
+  % Filet vertical
+  \fill[lhblue] (current page.north west) rectangle ([xshift=1.1cm]current page.south west);
+  % Logo
+  \node[anchor=north west] at ([xshift=3.0cm,yshift=-2.4cm]current page.north west)
+    {\IfFileExists{images/um5.png}{\includegraphics[height=2.5cm]{images/um5.png}}{}};
+  % Titre
+  \node[anchor=north west,text=lhblue,font=\sffamily\bfseries\fontsize{46}{52}\selectfont]
+    at ([xshift=3.0cm,yshift=-10.2cm]current page.north west) {\titreouvrage};
+  \node[anchor=north west,text=lhfonce,font=\sffamily\fontsize{22}{27}\selectfont]
+    at ([xshift=3.0cm,yshift=-12.2cm]current page.north west) {\soustitreouvrage};
+  \draw[lhblue,line width=1.2pt] ([xshift=3.0cm,yshift=-13.7cm]current page.north west) -- ++(2.5cm,0);
+  \node[anchor=north west,text=black!60,font=\sffamily\large]
+    at ([xshift=3.0cm,yshift=-14.1cm]current page.north west) {Des données structurées au streaming};
+  % Auteurs
+  \node[anchor=south west,text=lhfonce,font=\sffamily\large,align=left]
+    at ([xshift=3.0cm,yshift=5.2cm]current page.south west)
+    {Pr.~Anouar Riad Solh\\[4pt]Pr.~Hamid Ez-Zahraouy\\[4pt]Dr.~Mohamed Kachmar};
+  % Éditeur et année
+  \draw[black!25,line width=0.5pt] ([xshift=3.0cm,yshift=3.2cm]current page.south west) -- ([xshift=-2.5cm,yshift=3.2cm]current page.south east);
+  \node[anchor=north west,text=black!65,font=\sffamily] at ([xshift=3.0cm,yshift=2.9cm]current page.south west) {\editeur};
+  \node[anchor=north east,text=black!65,font=\sffamily] at ([xshift=-2.5cm,yshift=2.9cm]current page.south east) {\annee};
+\end{tikzpicture}
+\end{titlepage}
+\cleardoublepage

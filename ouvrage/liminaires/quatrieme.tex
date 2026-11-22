@@ -1,0 +1,35 @@
+% ---------------------------------------------------------------------
+%  Quatrième de couverture : même style que la première
+% ---------------------------------------------------------------------
+\cleardoublepage
+\thispagestyle{empty}
+\null\clearpage
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture,overlay]
+  \fill[lhblue] ([xshift=-1.1cm]current page.north east) rectangle (current page.south east);
+  \node[anchor=north west,text width=14.5cm,text=lhfonce,font=\sffamily,align=justify]
+    at ([xshift=2.5cm,yshift=-3.0cm]current page.north west) {%
+    {\LARGE\bfseries\color{lhblue} \titreouvrage\par}\smallskip
+    {\large \soustitreouvrage\par}\bigskip\bigskip
+    Le \emph{Lakehouse} est devenu l'architecture de référence des plateformes de données : des
+    fichiers ouverts, stockés à faible coût, auxquels une couche de métadonnées apporte les
+    transactions, l'historique et le contrôle du schéma d'un entrepôt de données.\par\medskip
+    Cet ouvrage propose de la comprendre en la construisant. Après une présentation de ses
+    principes, quatre travaux pratiques guident le lecteur dans la réalisation d'une plateforme
+    complète, sur les données réelles d'une place de marché en ligne : ingestion et qualité des
+    données, modélisation dimensionnelle avec dbt, analyse de texte, de messages JSON et d'images,
+    orchestration avec Airflow, exposition avec Trino et Superset, supervision et lineage, puis
+    traitement en continu avec Kafka et Spark Structured Streaming.\par\medskip
+    Tout fonctionne sur un ordinateur portable, avec des logiciels libres utilisés en entreprise.
+    Chaque chapitre précise ses objectifs, les résultats attendus, chiffrés, et la façon de les
+    interpréter.\par\medskip
+    L'ouvrage s'adresse aux étudiants de master et d'école d'ingénieurs en informatique, en science
+    des données et en informatique décisionnelle, ainsi qu'aux ingénieurs qui souhaitent se former
+    à ces architectures.\par\bigskip\bigskip
+    {\bfseries\color{lhblue} Les auteurs}\par\smallskip
+    Pr.~Anouar Riad Solh, Pr.~Hamid Ez-Zahraouy et Dr.~Mohamed Kachmar.
+  };
+  \draw[black!25,line width=0.5pt] ([xshift=2.5cm,yshift=3.2cm]current page.south west) -- ([xshift=-3.0cm,yshift=3.2cm]current page.south east);
+  \node[anchor=north west,text=black!65,font=\sffamily] at ([xshift=2.5cm,yshift=2.9cm]current page.south west) {\editeur};
+  \node[anchor=north east,text=black!65,font=\sffamily\small] at ([xshift=-3.0cm,yshift=2.9cm]current page.south east) {ISBN \isbn};
+\end{tikzpicture}

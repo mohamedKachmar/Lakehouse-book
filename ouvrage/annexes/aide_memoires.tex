@@ -1,0 +1,180 @@
+% Généré par outils/convertir.py : aide-mémoires des TP
+\chapter{Aide-mémoires}\label{ann:aide}
+Ces aide-mémoires regroupent, pour chaque travail pratique, les instructions les plus utiles.
+Ils complètent la documentation officielle des outils, sans la remplacer.
+
+\section{TP 1 -- Données structurées}\label{ann:aide-c3}
+
+Les imports utilisés partout sont \cmd{from pyspark.sql import functions as F, Window}.
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash\ttfamily\footnotesize}X@{}}
+\toprule
+\normalfont\textbf{Je veux\dots} & \normalfont\textbf{Code} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Lire}}} \\
+Lire une table du Lakehouse & df = spark.table("lakehouse.silver.orders") \\
+Lire des CSV (en texte) & spark.read.option("header", True).csv("s3a://landing/olist/sellers/") \\
+Lire une table PostgreSQL & spark.read.format("jdbc").options(**JDBC).option("dbtable", "ventes.orders").load() \\
+Regarder les données & df.show(5) \quad df.printSchema() \quad df.count() \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Transformer}}} \\
+Choisir et renommer des colonnes & df.select(F.col("a").alias("b"), "c") \\
+Ajouter ou remplacer une colonne & df.withColumn("prix", F.col("prix").cast("double")) \\
+Nettoyer un texte & F.trim("ville") \quad F.upper("etat") \quad F.initcap("ville") \quad F.lpad("cp", 5, "0") \\
+Valeur conditionnelle & F.when(F.col("poids") > 0, F.col("poids")) \quad \textrm{(sinon : null)} \\
+Remplacer une valeur nulle & F.coalesce(F.col("categorie"), F.lit("inconnue")) \\
+Écart en jours entre deux dates & F.datediff("date\_fin", "date\_debut") \\
+Filtrer des lignes & df.filter("statut = 'delivered'") \quad df.filter(F.col("prix") > 0) \\
+Supprimer des colonnes & df.drop("\_source", "\_ingere\_le") \\
+Supprimer les doublons & df.dropDuplicates(["order\_id"]) \\
+Garder la ligne la plus récente & w = Window.partitionBy("id").orderBy(F.col("updated\_at").desc()) \newline
+  df.withColumn("r", F.row\_number().over(w)).filter("r = 1").drop("r") \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Combiner et agréger}}} \\
+Jointure (gauche) & a.join(b, "order\_id", "left") \\
+Lignes de A absentes de B & a.join(b, "product\_id", "left\_anti") \\
+Lignes de A présentes dans B & a.join(b, "order\_id", "left\_semi") \\
+Agréger par groupe & df.groupBy("order\_id").agg(F.sum("price").alias("total"), F.count("*").alias("nb")) \\
+Valeur liée au maximum & F.max\_by("payment\_type", "payment\_value") \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Écrire (tables Iceberg)}}} \\
+Créer ou remplacer une table & df.writeTo("lakehouse.silver.x").using("iceberg").createOrReplace() \\
+Ajouter des lignes & df.writeTo("lakehouse.bronze.x").append() \\
+Utiliser SQL & spark.sql("SELECT ... FROM lakehouse.gold.x") \\
+Exposer un DataFrame à SQL & df.createOrReplaceTempView("ma\_vue") \\
+Historique d'une table & spark.sql("SELECT * FROM lakehouse.silver.x.snapshots") \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{TP 2 -- Texte et JSON}\label{ann:aide-c4}
+
+Les imports sont \cmd{from pyspark.sql import functions as F, Window}. Les opérations du TP 1 restent valables.
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash\ttfamily\footnotesize}X@{}}
+\toprule
+\normalfont\textbf{Je veux\dots} & \normalfont\textbf{Code} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Lire}}} \\
+CSV avec du texte sur plusieurs lignes & spark.read.option("header", True).option("multiLine", True).option("escape", '"').csv(chemin) \\
+Fichiers ligne par ligne, en texte & spark.read.text(chemin) \quad \textrm{(colonne }value\textrm{)} \\
+Laisser Spark deviner un JSON & spark.read.json(chemin).printSchema() \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{JSON et listes}}} \\
+Lire un JSON avec un schéma & F.from\_json("value", "colis\_id STRING, evenements ARRAY<STRUCT<code: STRING>>") \\
+Champ imbriqué & F.col("transporteur.nom") \quad F.col("m.*") \\
+Élément d'une liste & F.col("incidents")[0]["type"] \\
+Nombre d'éléments & F.size("evenements") \quad \textrm{(-1 si la liste est nulle)} \\
+Une ligne par élément & df.select("colis\_id", F.explode("evenements").alias("e")) \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Texte}}} \\
+Minuscules, sans accents & F.lower(c) \quad F.translate(c, "áàãéêíóôõúç", "aaaeeiooouc") \\
+Remplacer par une expression régulière & F.regexp\_replace(c, r"[\^{}a-z\textbackslash s]", " ") \\
+Coller deux textes & F.concat\_ws(" ", "titre", "message") \\
+Découper en mots & F.split(c, " ") \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{dbt (dans un terminal, depuis \texttt{mon\_travail/tp2})}}} \\
+Vérifier la connexion & dbt debug -{}-connection -{}-project-dir dbt\_etoile \\
+Construire un modèle & dbt run -{}-project-dir dbt\_etoile -{}-select dim\_produit \\
+Tout construire et tester & dbt build -{}-project-dir dbt\_etoile \\
+Générer la documentation & dbt docs generate -{}-static -{}-project-dir dbt\_etoile \\
+Désigner une table Silver / un modèle & \{\{ source('silver', 'orders') \}\} \quad \{\{ ref('dim\_date') \}\} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{scikit-learn}}} \\
+Vectoriser du texte & TfidfVectorizer(stop\_words=MOTS\_VIDES, ngram\_range=(1, 2), min\_df=5) \\
+Enchaîner les étapes & Pipeline([("tfidf", ...), ("modele", LogisticRegression(...))]) \\
+Probabilité de la classe 1 & pipe.predict\_proba(textes)[:, 1] \\
+Sauvegarder un modèle & joblib.dump(pipe, "modele.joblib") \quad joblib.load(...) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{TP 3 -- Images, orchestration et BI}\label{ann:aide-c5}
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash\ttfamily\footnotesize}X@{}}
+\toprule
+\normalfont\textbf{Je veux\dots} & \normalfont\textbf{Code} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Fichiers et images}}} \\
+Lire des fichiers binaires & spark.read.format("binaryFile").option("recursiveFileLookup", True).load(chemin) \\
+Empreinte exacte d'un fichier & F.sha2("content", 256) \\
+Décoder une image & Image.open(io.BytesIO(octets)) \quad img.load() \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Airflow}}} \\
+Démarrer / arrêter Airflow & docker compose -{}-profile orchestration up -d \quad \dots stop airflow \\
+Une tâche qui lance un script & BashOperator(task\_id="x", bash\_command="python x.py") \\
+Attendre une condition & PythonSensor(task\_id="x", python\_callable=f, mode="reschedule") \\
+Ordre des tâches & a >{}> b >{}> c \\
+Relances automatiques & default\_args=\{"retries": 2, "retry\_delay": timedelta(minutes=1)\} \\
+Calendrier & schedule="@daily" \quad schedule="0 3 * * 0" \textrm{(dimanche, 3 h)} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Iceberg}}} \\
+Fichiers d'une table & SELECT * FROM lakehouse.silver.photos.files \\
+Compacter & CALL lakehouse.system.rewrite\_data\_files(table => 'silver.photos') \\
+Purger l'historique & CALL lakehouse.system.expire\_snapshots(table => '...', older\_than => TIMESTAMP '...') \\
+Partitionner & CREATE TABLE ... USING iceberg PARTITIONED BY (vendeur) AS SELECT ... \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Trino}}} \\
+Nom complet d'une table & lakehouse.gold.fait\_avis \quad postgres.ventes.orders \\
+Versions d'une table & SELECT * FROM lakehouse.silver."orders\$snapshots" \\
+Relire une version & SELECT ... FROM lakehouse.silver.orders FOR VERSION AS OF <snapshot\_id> \\
+Connexion Superset & trino://superset@trino:8080/lakehouse \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Supervision}}} \\
+Démarrer les outils & docker compose -{}-profile observabilite -{}-profile orchestration up -d \\
+Puis redémarrer Airflow & docker compose -{}-profile orchestration restart airflow \\
+Mémoire des conteneurs (PromQL) & container\_memory\_working\_set\_bytes\{name=\~{}"lakehouse-.*"\} \\
+Exécutions de DAG en échec & airflow\_execution\_dag\_duree\_secondes\_count\{etat="failed"\} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{TP 4 -- Batch ou streaming}\label{ann:aide-c6}
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash\ttfamily\footnotesize}X@{}}
+\toprule
+\normalfont\textbf{Je veux\dots} & \normalfont\textbf{Code} \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Services et rejeu}}} \\
+Démarrer Kafka et Kafka UI & docker compose -{}-profile streaming up -d kafka kafka-ui \\
+Rejouer un mois dans Kafka & python /opt/lakehouse/scripts/rejouer\_suivi.py -{}-depuis 2018-03-01 -{}-jusqu-a 2018-04-01 \\
+Plus vite, ou d'un coup & \dots{} -{}-jours-par-seconde 5 \quad \dots{} -{}-sans-pause \\
+Dans un dossier & \dots{} -{}-dossier s3://landing/flux/suivi \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Kafka en Python}}} \\
+Créer un topic & admin.create\_topics([NewTopic("t", num\_partitions=3, replication\_factor=1)]) \\
+Lire des messages & c = Consumer(\{"bootstrap.servers": KAFKA, "group.id": "g"\}) \quad c.subscribe(["t"]) \quad c.poll(5) \\
+Valider la position & c.commit(asynchronous=False) \\
+Fin d'une partition & c.get\_watermark\_offsets(TopicPartition("t", 0)) \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Spark Structured Streaming}}} \\
+Lire Kafka & spark.readStream.format("kafka").option("kafka.bootstrap.servers", KAFKA).option("subscribe", "t").option("startingOffsets", "earliest").load() \\
+Lire une table Iceberg & spark.readStream.table("lakehouse.bronze.suivi\_evenements") \\
+Décoder le JSON & F.from\_json(F.col("value").cast("string"), SCHEMA) \\
+Écrire dans Iceberg & df.writeStream.option("checkpointLocation", chemin).toTable("lakehouse.bronze.x") \\
+Déclencheur & .trigger(processingTime="5 seconds") \quad .trigger(availableNow=True) \\
+Mode de sortie & .outputMode("append") \quad "update" \quad "complete" \\
+Attendre les retardataires & .withWatermark("horodatage\_ts", "12 hours") \\
+Fenêtre de temps & .groupBy(F.window("horodatage\_ts", "1 day"), "transporteur").count() \\
+Écarter les doublons & .dropDuplicatesWithinWatermark(["evenement\_id"]) \\
+Mettre à jour une table & .writeStream.foreachBatch(fonction) \textrm{puis} MERGE INTO \dots \\
+Suivre une requête & q.recentProgress \quad q.processAllAvailable() \quad q.stop() \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Iceberg}}} \\
+Snapshots, fichiers & SELECT * FROM lakehouse.bronze.suivi\_evenements.snapshots \quad \dots .files \\
+Purger l'historique & CALL lakehouse.system.expire\_snapshots(table => '...', older\_than => TIMESTAMP '...', retain\_last => 1) \\
+\bottomrule
+\end{tabularx}
+\end{center}

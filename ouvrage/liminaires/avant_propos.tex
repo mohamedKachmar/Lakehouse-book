@@ -1,0 +1,43 @@
+% ---------------------------------------------------------------------
+%  Avant-propos
+% ---------------------------------------------------------------------
+\chapter*{Avant-propos}
+\addcontentsline{toc}{chapter}{Avant-propos}
+\markboth{Avant-propos}{Avant-propos}
+
+En une quinzaine d'années, la façon dont les organisations stockent et exploitent leurs données a
+profondément changé. L'entrepôt de données, conçu pour des tableaux de bord sur des données
+structurées, a été complété par le lac de données, capable d'accueillir à faible coût des textes,
+des images ou des journaux d'événements, mais sans les garanties de fiabilité d'une base de
+données. Le \emph{Lakehouse} réunit ces deux mondes : des fichiers ouverts, stockés à faible coût,
+sur lesquels une couche de métadonnées apporte les transactions, l'historique des versions et le
+contrôle du schéma. Il est devenu en quelques années l'architecture de référence des plateformes de
+données.
+
+Cet ouvrage est né d'un module d'enseignement consacré à cette architecture. Il en reprend la
+démarche : comprendre en construisant. Plutôt que de décrire les outils un à un, il fait réaliser au
+lecteur une plateforme complète, sur une seule et même entreprise fictive mais réaliste, un site de
+commerce en ligne brésilien dont les données ont été rendues publiques. Chapitre après chapitre, la
+plateforme s'enrichit : des tables issues d'une base de vente, puis des avis clients et des messages
+JSON, des photos de produits, et enfin des événements reçus en continu. À chaque étape, le lecteur
+rencontre les questions qu'une équipe de données affronte réellement : la qualité des données
+reçues, leur modélisation, l'automatisation des traitements, leur supervision, et le choix entre un
+traitement par lots et un traitement en continu.
+
+Les travaux pratiques s'appuient exclusivement sur des logiciels libres, très utilisés en
+entreprise : Apache Spark, Apache Iceberg, Delta Lake, dbt, Apache Airflow, Trino, Apache Superset et
+Apache Kafka. L'ensemble tourne sur un simple ordinateur portable, dans des conteneurs Docker, et
+s'installe en une commande. Le lecteur n'a besoin d'aucun compte chez un fournisseur de cloud, et
+les notions acquises se transposent directement aux plateformes commerciales, auxquelles l'ouvrage
+fait référence chaque fois que c'est utile.
+
+L'ouvrage s'adresse aux étudiants de master et d'école d'ingénieurs en informatique, en science des
+données ou en informatique décisionnelle, ainsi qu'aux ingénieurs qui souhaitent se former à ces
+architectures. Il suppose une pratique de base de Python et de SQL, et des notions sur les bases de
+données relationnelles.
+
+Nous espérons qu'il permettra au lecteur d'acquérir non seulement la maîtrise de ces outils, mais
+aussi le raisonnement qui permet de les choisir, de les combiner et d'en mesurer les limites.
+
+\bigskip
+\hfill\textit{Les auteurs}

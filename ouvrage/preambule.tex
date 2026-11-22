@@ -1,0 +1,179 @@
+% =====================================================================
+%  Préambule commun de l'ouvrage
+% =====================================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage[babel=true]{microtype}
+
+% Format A4, marges de reliure (intérieur plus large que l'extérieur)
+\usepackage[a4paper,inner=2.7cm,outer=2.2cm,top=2.6cm,bottom=2.8cm,headheight=14pt,bindingoffset=0.3cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{needspace}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,parsep=0pt,topsep=4pt}
+\usepackage{amssymb}
+\usepackage{emptypage}
+
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xltabular}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,babel}
+\usepackage{listings}
+
+\usepackage[htt]{hyphenat}
+\usepackage[round,sort]{natbib}
+\usepackage{imakeidx}
+\makeindex[intoc,title=Index,columns=2]
+\usepackage[hidelinks,bookmarksnumbered]{hyperref}
+\usepackage{xurl}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{graphicx}
+\graphicspath{{images/}}
+
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+\captionsetup{font=small,labelfont=bf,labelsep=period}
+
+% ---------- Couleurs ----------
+\definecolor{lhblue}{HTML}{1F4E79}
+\definecolor{lhteal}{HTML}{0F766E}
+\definecolor{lhred}{HTML}{B91C1C}
+\definecolor{lhviolet}{HTML}{6D28D9}
+\definecolor{lhgray}{HTML}{F3F4F6}
+\definecolor{lhbronze}{HTML}{A16207}
+\definecolor{lhsilver}{HTML}{64748B}
+\definecolor{lhgold}{HTML}{CA8A04}
+\definecolor{lhfonce}{HTML}{17394D}
+\definecolor{lhvert}{HTML}{5FB89D}
+
+% ---------- Images ----------
+% Captures d'écran : images/tp1/ à images/tp4/ (ou à la racine) ; tant qu'un fichier manque,
+% un cadre indique le nom attendu.
+\newcommand{\imagecapture}[1]{\includegraphics[width=0.92\textwidth,height=0.42\textheight,keepaspectratio]{#1}}
+\newcommand{\cadrecapture}[1]{\fbox{\parbox[c][3.2cm][c]{0.88\textwidth}{\centering\footnotesize
+       Capture à ajouter : \texttt{\detokenize{#1}.png}}}}
+\newcommand{\capture}[3]{%
+  \begin{figure}[H]\centering
+  \IfFileExists{#1.png}{\imagecapture{#1.png}}{%
+  \IfFileExists{images/tp1/#1.png}{\imagecapture{images/tp1/#1.png}}{%
+  \IfFileExists{images/tp2/#1.png}{\imagecapture{images/tp2/#1.png}}{%
+  \IfFileExists{images/tp3/#1.png}{\imagecapture{images/tp3/#1.png}}{%
+  \IfFileExists{images/tp4/#1.png}{\imagecapture{images/tp4/#1.png}}{\cadrecapture{#1}}}}}}%
+  \caption{#2}\label{#3}
+  \end{figure}}
+% Logos des logiciels (images/logos/, voir LISEZMOI.md) ; sans le fichier, rien ne s'affiche
+\newcommand{\logo}[2][1.15em]{\IfFileExists{images/logos/#2.png}{\raisebox{-0.22em}{\includegraphics[height=#1]{images/logos/#2.png}}\hspace{0.3em}}{}}
+
+% Pictogrammes des figures d'architecture (dessins génériques)
+\tikzset{
+  pics/fichier/.style={code={%
+    \fill[white,draw=lhfonce,line width=0.7pt] (-0.32,-0.42) -- (0.18,-0.42) -- (0.32,-0.28) -- (0.32,0.42) -- (-0.32,0.42) -- cycle;
+    \draw[lhfonce,line width=0.7pt] (0.18,-0.42) -- (0.18,-0.28) -- (0.32,-0.28);
+    \node[font=\sffamily\bfseries\tiny,text=lhfonce] at (0,0.05) {#1};}},
+  pics/photo/.style={code={%
+    \draw[lhfonce,line width=0.7pt,fill=white,rounded corners=1pt] (-0.38,-0.3) rectangle (0.38,0.3);
+    \fill[lhvert] (-0.3,-0.22) -- (-0.08,0.08) -- (0.06,-0.08) -- (0.14,0.02) -- (0.3,-0.22) -- cycle;
+    \fill[lhgold] (0.18,0.16) circle (0.06);}},
+  pics/table/.style={code={%
+    \node[cylinder,shape border rotate=90,aspect=0.28,draw=#1!75!black,fill=#1!35,
+          minimum width=0.85cm,minimum height=0.95cm,line width=0.6pt] {};}},
+  pastille/.style={circle,fill=lhvert,draw=white,line width=1pt,text=white,
+                   font=\sffamily\bfseries\scriptsize,inner sep=1.6pt},
+  case/.style={draw=lhfonce,fill=white,minimum width=0.4cm,minimum height=0.4cm,inner sep=0pt,
+               font=\sffamily\tiny,text=lhfonce},
+}
+
+% ---------- Parties, chapitres, sections ----------
+\titleformat{\part}[display]{\centering\sffamily\color{lhblue}}
+  {\large\MakeUppercase{\partname}~\thepart}{1.2em}{\Huge\bfseries}
+\titleformat{\chapter}[display]{\sffamily\color{lhblue}}
+  {\large\MakeUppercase{\chaptertitlename}~\thechapter}{0.6em}{\Huge\bfseries}[\vspace{0.4em}{\color{lhblue}\titlerule[1.2pt]}]
+\titlespacing*{\chapter}{0pt}{0pt}{2.2em}
+\titleformat{\section}{\needspace{6\baselineskip}\Large\bfseries\color{lhblue}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\needspace{4\baselineskip}\large\bfseries\color{lhblue}}{\thesubsection}{0.7em}{}
+\setcounter{secnumdepth}{1}
+\setcounter{tocdepth}{1}
+% Sous-titre d'un chapitre, juste après \chapter
+\newcommand{\soustitre}[1]{\vspace*{-1.2em}{\large\itshape\color{lhfonce}#1}\par\vspace{1.2em}}
+
+% ---------- En-têtes et pieds de page ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\quad #1}}
+\fancyhead[LE]{\small\color{lhblue}\leftmark}
+\fancyhead[RO]{\small\color{lhblue}\rightmark}
+\fancyfoot[LE,RO]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[LE,RO]{\small\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ---------- Encadrés : texte simple, sans boîte ----------
+% Un titre en gras introduit le paragraphe ; seul « Attention » est en rouge.
+\newenvironment{resultat}{\par\medskip\noindent\textbf{Résultat attendu :}\ }{\par\medskip}
+\newenvironment{astuce}{\par\medskip\noindent\textbf{Astuce :}\ }{\par\medskip}
+\newenvironment{attention}[1][]{\par\medskip\noindent\textbf{\textcolor{lhred}{Attention\if\relax\detokenize{#1}\relax\else{} -- #1\fi{} :}}\ }{\par\medskip}
+\newenvironment{notion}[1][]{\par\medskip\noindent\textbf{\textcolor{lhblue}{Notion clé\if\relax\detokenize{#1}\relax\else{} -- #1\fi{} :}}\ }{\par\medskip}
+% Captures : comment les obtenir (avant la figure), comment les lire (après la figure)
+\newenvironment{obtenir}{\par\needspace{12\baselineskip}\smallskip
+  \begin{enumerate}[leftmargin=*,nosep,label=\arabic*.]}{\end{enumerate}\par}
+\newenvironment{lecture}{\par\noindent\ignorespaces}{\par\medskip}
+% Ouverture et clôture des chapitres
+\newenvironment{objectifs}{\par\noindent\textbf{\textcolor{lhblue}{Objectifs d'apprentissage}}\par\smallskip
+  \noindent À la fin de ce chapitre, vous saurez :
+  \begin{itemize}[leftmargin=*,itemsep=1pt]}{\end{itemize}\par\medskip}
+\newenvironment{aretenir}{\section*{À retenir}\addcontentsline{toc}{section}{À retenir}
+  \begin{itemize}[leftmargin=*,itemsep=2pt]}{\end{itemize}}
+\newenvironment{plusloin}{\section*{Pour aller plus loin}\addcontentsline{toc}{section}{Pour aller plus loin}}{}
+
+% ---------- Code ----------
+\lstset{
+  basicstyle=\ttfamily\small, columns=fullflexible, keepspaces=true,
+  breaklines=true, showstringspaces=false, upquote=true,
+  frame=single, framesep=5pt, xleftmargin=6pt, xrightmargin=6pt,
+  backgroundcolor=\color{lhgray}, rulecolor=\color{black!15},
+  commentstyle=\color{black!55}\itshape,
+  keywordstyle=\color{lhblue}\bfseries, stringstyle=\color{black!70},
+  literate=
+   {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {à}{{\`a}}1 {ç}{{\c c}}1
+   {ù}{{\`u}}1 {î}{{\^i}}1 {ô}{{\^o}}1 {É}{{\'E}}1 {Ê}{{\^E}}1
+}
+\lstdefinestyle{shell}{language=bash,backgroundcolor=\color{black!85},
+  basicstyle=\ttfamily\small\color{white},rulecolor=\color{black!85},
+  commentstyle=\color{black!35}\itshape,keywordstyle=\color{white}}
+
+\lstdefinelanguage{json}{morestring=[b]", stringstyle=\color{black!75}, literate=
+   {é}{{\'e}}1 {è}{{\`e}}1 {à}{{\`a}}1}
+
+% ---------- Petites commandes ----------
+\newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\nb}[1]{\textcolor{lhblue}{\texttt{#1}}}
+\newcommand{\cocher}{$\square$\ }
+\newcommand{\etape}[1]{\tikz[baseline=(n.base)]\node[circle,fill=lhvert,text=white,
+  font=\sffamily\bfseries\scriptsize,inner sep=1.4pt](n){#1};}
+\newcommand{\pastilletexte}[1]{\etape{#1}}
+\newcommand{\dossier}[2][0]{\hspace*{#1em}\textbf{\texttt{#2}}}
+\newcommand{\fic}[2][1.2]{\hspace*{#1em}\texttt{#2}}
+\pdfstringdefDisableCommands{\def\cmd#1{#1}\def\nb#1{#1}}
+
+% ---------- Métadonnées de l'ouvrage (à compléter avant le dépôt) ----------
+\newcommand{\titreouvrage}{Data Lakehouse}
+\newcommand{\soustitreouvrage}{Architecture et travaux pratiques}
+\newcommand{\editeur}{Université Mohammed V de Rabat}
+\newcommand{\annee}{2026}
+\newcommand{\isbn}{\textit{[à attribuer par la BNRM]}}
+\newcommand{\depotlegal}{\textit{[à attribuer par la BNRM]}}
+\newcommand{\depotcode}{\url{https://github.com/mohamedKachmar/lakehouse-tp}}
+\hypersetup{pdftitle={Data Lakehouse : architecture et travaux pratiques},
+  pdfauthor={Anouar Riad Solh, Hamid Ez-Zahraouy, Mohamed Kachmar},
+  pdfsubject={Ouvrage pédagogique}, pdflang={fr}}
+
+% Pas d'étirement vertical : les figures [H] qui ne tiennent pas laissent un bas de page libre
+\raggedbottom

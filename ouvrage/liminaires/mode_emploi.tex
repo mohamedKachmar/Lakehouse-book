@@ -1,0 +1,82 @@
+% ---------------------------------------------------------------------
+%  Mode d'emploi de l'ouvrage
+% ---------------------------------------------------------------------
+\chapter*{Comment utiliser cet ouvrage}
+\addcontentsline{toc}{chapter}{Comment utiliser cet ouvrage}
+\markboth{Comment utiliser cet ouvrage}{Comment utiliser cet ouvrage}
+
+\section*{Organisation}
+
+L'ouvrage comprend deux parties, suivies d'annexes.
+
+La \textbf{partie I} pose les fondements. Le chapitre~\ref{ch:fondements} présente l'architecture
+Lakehouse, ses origines et ses principes : formats de fichiers et de tables ouverts, séparation du
+stockage et du calcul, architecture en couches Bronze, Silver et Gold, modélisation dimensionnelle,
+traitement par lots et en continu. Le chapitre~\ref{ch:environnement} installe l'environnement de
+travail utilisé dans toute la suite.
+
+La \textbf{partie II} est formée de quatre travaux pratiques (TP), qui construisent progressivement
+une plateforme complète sur les données d'un site de commerce en ligne.
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{@{}l X l@{}}
+\toprule
+\textbf{Chapitre} & \textbf{Thème} & \textbf{Durée indicative} \\
+\midrule
+\ref{ch:tp1}, TP 1 & Données structurées : de la base de vente au tableau de bord, Iceberg et Delta Lake & 6 h + 2 h 30 \\
+\ref{ch:tp2}, TP 2 & Texte et JSON : avis clients, suivi des colis, modélisation avec dbt & 6 h + 2 h \\
+\ref{ch:tp3}, TP 3 & Images, orchestration et BI : Airflow, Trino, Superset, supervision & 9 h + 3 h \\
+\ref{ch:tp4}, TP 4 & Batch ou streaming : Kafka et Spark Structured Streaming & 6 h + 2 h \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+La durée indique le temps en salle, puis le travail personnel conseillé. Les TP se suivent : chacun
+utilise les tables construites par les précédents. Les annexes regroupent les aide-mémoires de code,
+un glossaire français-anglais et la description des jeux de données avec leurs licences.
+
+\section*{Le matériel d'accompagnement}
+
+Les énoncés des TP prennent la forme de \emph{notebooks} Jupyter, accompagnés de scripts et d'un
+environnement Docker complet, disponibles à l'adresse \depotcode. Le chapitre~\ref{ch:environnement}
+explique comment les installer. Le lecteur copie les énoncés dans son dossier de travail et complète
+les cellules marquées \cmd{À COMPLÉTER}. Chaque chapitre de la partie II indique le notebook à
+utiliser pour chaque partie, et les numéros de cellule à exécuter avant chaque capture d'écran.
+
+Les résultats chiffrés cités dans les chapitres (nombre de lignes, de doublons, de fichiers\dots)
+ont été obtenus avec les versions des données et des logiciels fournies. Le lecteur doit retrouver
+exactement les mêmes nombres. Seules les durées varient d'une machine à l'autre.
+
+\section*{Conventions}
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+\textbf{Élément} & \textbf{Signification} \\
+\midrule
+\textbf{\textcolor{lhblue}{Notion clé :}} & une notion à retenir, définie au moment où elle sert \\
+\textbf{\textcolor{lhred}{Attention :}} & un piège fréquent, ou une précaution à prendre \\
+\textbf{Résultat attendu :} & ce que le lecteur doit obtenir à la fin d'une partie \\
+\etape{1}\ \etape{2}\dots & les étapes numérotées des figures d'architecture \\
+\nb{01\_bronze} & le nom d'un notebook \\
+\cmd{silver.orders} & un nom de table, de fichier, de colonne ou une commande \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Les commandes à saisir dans un terminal sont présentées sur fond sombre, le code Python ou SQL sur
+fond clair :
+\begin{lstlisting}[style=shell]
+docker compose up -d
+\end{lstlisting}
+\begin{lstlisting}[language=Python]
+spark.table("lakehouse.silver.orders").count()
+\end{lstlisting}
+
+Les termes techniques sont donnés en français, avec leur équivalent anglais à la première
+occurrence lorsque celui-ci est d'usage courant dans la profession. Le glossaire de
+l'annexe~\ref{ann:glossaire} les rassemble.

@@ -1,0 +1,15 @@
+# Fichiers générés par LaTeX
+*.aux
+*.log
+*.toc
+*.lof
+*.lot
+*.out
+*.idx
+*.ind
+*.ilg
+*.bbl
+*.blg
+*.synctex.gz
+# PDF de compilation (ouvrage.pdf, ouvrage_v2.pdf, ...)
+*.pdf

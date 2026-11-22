@@ -1,0 +1,67 @@
+% ---------------------------------------------------------------------
+%  Données et licences
+% ---------------------------------------------------------------------
+\chapter{Données et licences}\label{ann:donnees}
+
+\section{Les données Olist}
+
+Le jeu \emph{Brazilian E-Commerce Public Dataset by Olist} \citep{olist2018} décrit environ
+100\,000 commandes passées entre 2016 et 2018 sur plusieurs places de marché brésiliennes. Les
+données sont réelles et anonymisées : les noms des entreprises et des clients ont été remplacés.
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l X l@{}}
+\toprule
+\textbf{Fichier} & \textbf{Contenu} & \textbf{Utilisé dans} \\
+\midrule
+\cmd{orders}, \cmd{order\_items} & commandes et lignes de commande & TP 1 à 4 \\
+\cmd{order\_payments} & paiements & TP 1 \\
+\cmd{customers}, \cmd{sellers} & clients et vendeurs, avec leur ville et leur état & TP 1 à 3 \\
+\cmd{products}, \cmd{product\_category\_name\_translation} & produits et catégories, avec leur nom anglais & TP 1 à 3 \\
+\cmd{order\_reviews} & avis des clients, en portugais & TP 2 et 3 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Les tables de vente sont chargées dans une base PostgreSQL, qui joue le rôle de l'application de
+vente. Les autres sont fournies en fichiers CSV.
+
+Le jeu est diffusé sous licence \textbf{Creative Commons Attribution -- Pas d'utilisation
+commerciale -- Partage dans les mêmes conditions 4.0} (CC BY-NC-SA 4.0).
+
+\section{Les données reconstituées}
+
+Deux sources des travaux pratiques ont été reconstituées à partir des commandes Olist, pour
+illustrer des situations réelles que le jeu d'origine ne contient pas :
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{les messages de suivi des colis} (TP 2) : un message JSON par colis, avec ses étapes
+        et, à partir de 2018, ses incidents. Les dates suivent celles des commandes. Quelques défauts
+        sont ajoutés volontairement : messages tronqués, envoyés deux fois, changement de format ;
+  \item \textbf{le flux d'événements} (TP 4) : les mêmes messages, découpés en événements et rejoués
+        en temps accéléré, avec 5~\% d'événements en retard.
+\end{itemize}
+Ces données sont produites par les scripts du dépôt d'accompagnement, à partir de tirages
+aléatoires à graine fixe : elles sont identiques d'une exécution à l'autre. Elles suivent la
+licence du jeu Olist dont elles dérivent.
+
+\section{Les photos de produits}
+
+Les photos et les fiches du TP 3 sont un sous-ensemble du jeu \emph{Amazon Berkeley Objects}
+\citep{collins2022}, publié par Amazon et l'université de Californie à Berkeley sous licence
+\textbf{Creative Commons Attribution -- Pas d'utilisation commerciale 4.0} (CC BY-NC 4.0). Environ
+3\,000 photos de six types de produits ont été retenues, réduites à 256 pixels au plus, et réparties
+entre douze vendeurs fictifs. Des défauts ont été ajoutés : fichiers coupés, fichier qui n'est pas
+une image, vignettes minuscules, photos envoyées deux fois ou recadrées.
+
+\section{Le modèle de vision}
+
+Le TP 3 utilise le réseau MobileNetV3 \citep{howard2019}, pré-entraîné sur le jeu ImageNet, converti
+au format ONNX. Il sert uniquement à calculer des vecteurs, sans réentraînement.
+
+\section{Conditions d'utilisation}
+
+Ces licences autorisent la reproduction et l'adaptation des données à des fins non commerciales, à
+condition de citer leur source. Cet ouvrage, à caractère et à usage pédagogiques, respecte ces
+conditions. Toute réutilisation commerciale des données demanderait l'accord de leurs détenteurs.

@@ -1,0 +1,73 @@
+% ---------------------------------------------------------------------
+%  Faux-titre, page de titre et verso de la page de titre
+% ---------------------------------------------------------------------
+% Faux-titre
+\thispagestyle{empty}
+\vspace*{6cm}
+\begin{center}
+{\sffamily\Huge\bfseries\color{lhblue}\titreouvrage}\par\medskip
+{\sffamily\Large\color{lhfonce}\soustitreouvrage}
+\end{center}
+\cleardoublepage
+
+% Page de titre
+\thispagestyle{empty}
+\begin{center}
+\IfFileExists{images/um5.png}{\includegraphics[height=2.6cm]{images/um5.png}}{}\par
+\vspace{2.2cm}
+{\sffamily\fontsize{34}{40}\selectfont\bfseries\color{lhblue}\titreouvrage}\par\medskip
+{\sffamily\LARGE\color{lhfonce}\soustitreouvrage}\par\medskip
+{\sffamily\large Des données structurées au streaming}\par
+\vspace{2.4cm}
+{\Large Pr.~Anouar \textsc{Riad Solh}}\par\medskip
+{\Large Pr.~Hamid \textsc{Ez-Zahraouy}}\par\medskip
+{\Large Dr.~Mohamed \textsc{Kachmar}}\par
+\vfill
+{\large\sffamily \editeur}\par
+{\sffamily Rabat, \annee}
+\end{center}
+\clearpage
+
+% Verso de la page de titre : mentions légales
+\thispagestyle{empty}
+\vspace*{\fill}
+{\small
+\renewcommand{\arraystretch}{1.25}
+\noindent\begin{tabularx}{\textwidth}{@{}l X@{}}
+Titre & \titreouvrage{} : \soustitreouvrage \\
+Auteurs & Pr.~Anouar Riad Solh, Pr.~Hamid Ez-Zahraouy, Dr.~Mohamed Kachmar \\
+Éditeur & \editeur, Rabat (Maroc) \\
+Édition & Première édition, \annee \\
+Dépôt légal & \depotlegal \\
+ISBN & \isbn \\
+\end{tabularx}
+
+\medskip\noindent
+© \annee, \editeur. Tous droits réservés.
+
+\noindent
+Ouvrage à caractère et à usage pédagogiques. Conformément à la loi n° 2-00 relative aux droits
+d'auteur et droits voisins, toute reproduction ou représentation, intégrale ou partielle, faite
+sans le consentement des auteurs et de l'éditeur est illicite, à l'exception des copies réservées
+à l'usage privé du copiste et des courtes citations justifiées par le caractère pédagogique ou
+scientifique de l'œuvre à laquelle elles sont incorporées.
+
+\noindent
+\textbf{Code et énoncés d'accompagnement.} L'environnement Docker, les notebooks et les scripts
+utilisés dans les travaux pratiques sont disponibles à l'adresse \depotcode.
+
+\noindent
+\textbf{Données.} Les travaux pratiques utilisent le jeu de données public \emph{Brazilian
+E-Commerce Public Dataset by Olist} (licence CC BY-NC-SA 4.0) et un sous-ensemble du jeu
+\emph{Amazon Berkeley Objects} (licence CC BY-NC 4.0), dans le respect de leurs conditions
+d'utilisation non commerciale (annexe~\ref{ann:donnees}).
+
+\noindent
+\textbf{Marques.} Les noms et logos des logiciels cités (Apache Spark, Apache Iceberg, Apache Kafka,
+Apache Airflow, Apache Superset, Trino, dbt, Docker, etc.) sont des marques de leurs propriétaires
+respectifs. Ils sont utilisés uniquement pour désigner ces logiciels.
+
+\noindent
+Composé en \LaTeX{} avec les polices Latin Modern.
+}
+\cleardoublepage

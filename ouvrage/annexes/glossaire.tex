@@ -1,0 +1,83 @@
+% ---------------------------------------------------------------------
+%  Glossaire français-anglais
+% ---------------------------------------------------------------------
+\chapter{Glossaire}\label{ann:glossaire}
+
+Les termes sont classés par ordre alphabétique. L'équivalent anglais, entre parenthèses, est celui
+que l'on rencontre dans la documentation des outils.
+
+\begin{description}[leftmargin=0pt,itemsep=3pt,font=\normalfont\bfseries]
+\item[ACID] (\emph{ACID}) Propriétés d'une transaction : atomicité, cohérence, isolation et
+  durabilité. Une transaction s'applique en entier ou pas du tout.
+\item[Architecture en médaillon] (\emph{medallion architecture}) Organisation des données en trois
+  couches successives : Bronze, Silver et Gold.
+\item[Batch] (\emph{batch processing}) Voir \emph{traitement par lots}.
+\item[Bronze, Silver, Gold] Couches de l'architecture en médaillon : données brutes, données
+  propres et contrôlées, données métier prêtes pour l'analyse.
+\item[Catalogue] (\emph{catalog}) Service qui associe le nom d'une table à ses métadonnées
+  courantes, pour que tous les moteurs voient la même version.
+\item[Checkpoint] (\emph{checkpoint}) Dossier où une requête en continu note les positions lues et
+  écrites, pour reprendre sans perte ni doublon après un arrêt.
+\item[Clé de partition] (\emph{partition key}) Dans Kafka, valeur qui détermine la partition d'un
+  message ; dans une table, colonne qui détermine le rangement des fichiers.
+\item[Compactage] (\emph{compaction}) Regroupement de nombreux petits fichiers d'une table en
+  quelques gros fichiers.
+\item[Dimension] (\emph{dimension}) Table qui décrit le contexte d'un fait : client, produit,
+  vendeur, date.
+\item[DAG] (\emph{Directed Acyclic Graph}) Graphe orienté sans cycle ; dans Airflow, description
+  des tâches d'un pipeline et de leur ordre.
+\item[ELT, ETL] (\emph{Extract, Load, Transform} ; \emph{Extract, Transform, Load}) Chargement puis
+  transformation des données, ou l'inverse.
+\item[Entrepôt de données] (\emph{data warehouse}) Base orientée analyse, alimentée par les
+  applications, historisée et structurée.
+\item[Fédération] (\emph{federated query}) Requête qui joint, en une fois, des données de plusieurs
+  systèmes.
+\item[Fenêtre de temps] (\emph{window}) Intervalle de temps sur lequel on agrège un flux, par
+  exemple une journée.
+\item[Format de table] (\emph{table format}) Couche de métadonnées (Iceberg, Delta Lake, Hudi) qui
+  fait d'un ensemble de fichiers une table transactionnelle et versionnée.
+\item[Fuite de données] (\emph{data leakage}) Utilisation, pour entraîner un modèle,
+  d'informations qui ne seraient pas disponibles au moment de la prédiction.
+\item[Groupe de consommateurs] (\emph{consumer group}) Ensemble de lecteurs Kafka qui partagent une
+  même position de lecture.
+\item[Heure de l'événement] (\emph{event time}) Moment où un événement s'est produit, par
+  opposition à l'heure de son traitement (\emph{processing time}).
+\item[Idempotence] (\emph{idempotence}) Propriété d'un traitement qui, relancé, ne change pas le
+  résultat.
+\item[Instantané] (\emph{snapshot}) État d'une table à un moment donné ; chaque écriture en crée un.
+\item[Lac de données] (\emph{data lake}) Stockage de fichiers dans leur format d'origine, à faible
+  coût, sans garantie transactionnelle.
+\item[Lakehouse] Architecture qui ajoute à un lac de données les garanties d'un entrepôt, grâce à
+  un format de table ouvert.
+\item[Lineage] (\emph{data lineage}) Graphe qui relie chaque table aux traitements qui la
+  produisent et aux tables qu'ils lisent.
+\item[Micro-lot] (\emph{micro-batch}) Petit lot de données traité à chaque déclenchement d'une
+  requête en continu.
+\item[Offset] (\emph{offset}) Numéro d'un message dans sa partition Kafka.
+\item[OLAP, OLTP] (\emph{OnLine Analytical / Transaction Processing}) Usages analytique et
+  transactionnel des données.
+\item[Orchestration] (\emph{orchestration}) Enchaînement automatique des tâches d'un pipeline, avec
+  calendrier, relances et historique.
+\item[Partition] (\emph{partition}) Dans Kafka, morceau d'un topic dans lequel l'ordre est garanti ;
+  dans une table, sous-ensemble de fichiers qui partagent une valeur de colonne.
+\item[Quarantaine] (\emph{quarantine}) Table où l'on range les lignes rejetées par un contrôle de
+  qualité, avec la raison du rejet.
+\item[Retard d'un groupe] (\emph{consumer lag}) Nombre de messages qu'un groupe de consommateurs n'a
+  pas encore lus.
+\item[Schéma en étoile, en constellation] (\emph{star schema}, \emph{galaxy schema}) Une table de
+  faits entourée de ses dimensions ; plusieurs tables de faits qui partagent leurs dimensions.
+\item[Stockage objet] (\emph{object storage}) Stockage de fichiers identifiés par un chemin, comme
+  Amazon S3, accessible par une interface web.
+\item[Streaming] (\emph{stream processing}) Voir \emph{traitement en continu}.
+\item[Table de faits] (\emph{fact table}) Table qui enregistre des événements mesurables, avec
+  leurs mesures et leurs clés vers les dimensions.
+\item[Topic] (\emph{topic}) Dans Kafka, file de messages identifiée par un nom.
+\item[Traitement en continu] (\emph{stream processing}) Traitement des événements dès leur arrivée.
+\item[Traitement par lots] (\emph{batch processing}) Traitement, à heure fixe, des données
+  accumulées.
+\item[Vecteur] (\emph{embedding}) Suite de nombres qui résume le contenu d'un texte ou d'une image.
+\item[Voyage dans le temps] (\emph{time travel}) Lecture d'une table telle qu'elle était à un
+  instantané passé.
+\item[Watermark] (\emph{watermark}) Limite au-delà de laquelle un événement en retard n'est plus
+  attendu ; elle borne l'état d'une requête en continu.
+\end{description}

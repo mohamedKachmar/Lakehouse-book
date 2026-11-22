@@ -1,0 +1,56 @@
+% =====================================================================
+%  Data Lakehouse : architecture et travaux pratiques
+%  Anouar Riad Solh, Hamid Ez-Zahraouy, Mohamed Kachmar
+%  Université Mohammed V de Rabat
+%
+%  Compilation : pdflatex, makeindex, pdflatex, pdflatex
+%    pdflatex ouvrage && makeindex ouvrage && pdflatex ouvrage && pdflatex ouvrage
+% =====================================================================
+\documentclass[11pt,a4paper,twoside,openright]{book}
+
+\input{preambule}
+
+\begin{document}
+
+% ---------------------------------------------------------------------
+\frontmatter
+% ---------------------------------------------------------------------
+\input{liminaires/couverture}
+\input{liminaires/titre}
+\input{liminaires/avant_propos}
+\input{liminaires/mode_emploi}
+
+\cleardoublepage
+\tableofcontents
+\cleardoublepage
+\listoffigures
+\listoftables
+
+% ---------------------------------------------------------------------
+\mainmatter
+% ---------------------------------------------------------------------
+\part{Fondements}
+\input{chapitres/ch1_fondements}
+\input{chapitres/ch2_environnement}
+
+\part{Travaux pratiques}
+\input{chapitres/ch3_tp1}
+\input{chapitres/ch4_tp2}
+\input{chapitres/ch5_tp3}
+\input{chapitres/ch6_tp4}
+
+% ---------------------------------------------------------------------
+\appendix
+% ---------------------------------------------------------------------
+\input{annexes/aide_memoires}
+\input{annexes/glossaire}
+\input{annexes/donnees_licences}
+
+% ---------------------------------------------------------------------
+\backmatter
+% ---------------------------------------------------------------------
+\input{liminaires/bibliographie}
+\printindex
+\input{liminaires/quatrieme}
+
+\end{document}

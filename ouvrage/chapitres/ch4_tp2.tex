@@ -1,0 +1,593 @@
+% =====================================================================
+%  Chapitre 4 -- généré par outils/convertir.py depuis docs/tp2_texte_json.tex
+% =====================================================================
+\chapter[TP 2 -- Texte et JSON]{TP 2 -- Texte et JSON}\label{ch:tp2}
+\soustitre{Avis clients, suivi des colis, modélisation dimensionnelle avec dbt et analyse du texte}
+
+\begin{objectifs}
+  \item distinguer données structurées, semi-structurées et non structurées ;
+  \item ingérer du texte libre et des messages JSON sans perdre l'original ;
+  \item lire un JSON imbriqué avec un schéma écrit, et déplier ses listes en tables ;
+  \item construire une couche Gold en schéma en constellation avec dbt, testée et documentée ;
+  \item transformer du texte en variables (TF-IDF) et repérer automatiquement les avis négatifs.
+\end{objectifs}
+
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}l X@{}}
+\toprule
+Durée indicative & 2 séances de 3 h, et environ 2 h de travail personnel \\
+Prérequis & chapitre~\ref{ch:tp1} : tables Silver \cmd{orders}, \cmd{order\_items}, \cmd{customers}, \cmd{products} et \cmd{sellers} \\
+Notebooks & \nb{notebooks/tp2/}, quatre notebooks et le projet dbt \cmd{dbt\_etoile} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+% =====================================================================
+\section{Le scénario}
+% =====================================================================
+
+Le TP 1 a montré qu'Olist livre environ 8~\% de ses commandes en retard. La direction veut
+maintenant comprendre ce que les clients en pensent, et ce qui se passe pendant la livraison :
+
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Les retards et les incidents de livraison font-ils de mauvais avis ?
+  \item Les transporteurs se valent-ils ?
+  \item Où les clients sont-ils le moins satisfaits ?
+  \item Peut-on repérer automatiquement, dans ce qu'ils écrivent, les clients mécontents, pour que le
+        service client les traite en priorité ?
+\end{enumerate}
+
+Pour y répondre, il faut deux nouvelles sources, moins bien rangées que les tables du TP 1 : les
+\textbf{avis des clients}, avec un commentaire en texte libre, et les \textbf{messages JSON} que les
+transporteurs envoient pour suivre chaque colis.
+
+% =====================================================================
+\section{Les données}
+% =====================================================================
+
+\begin{notion}[Structuré, semi-structuré, non structuré]\index{donnees semi-structurees@données semi-structurées}
+une donnée \emph{structurée} entre dans des
+colonnes fixes (les tables du TP 1). Une donnée \emph{semi-structurée} porte sa structure avec elle,
+sous forme de champs nommés, mais cette structure peut être imbriquée et varier d'un message à
+l'autre, comme dans le JSON. Une donnée \emph{non structurée} n'a pas de structure exploitable
+directement (texte libre, image, son). Un Lakehouse accueille les trois.
+\end{notion}
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l l X r@{}}
+\toprule
+\textbf{Source} & \textbf{Format} & \textbf{Contenu} & \textbf{Volume} \\
+\midrule
+Avis des clients & CSV & Une note de 1 à 5 et, pour 42~\% des avis, un titre et un commentaire
+  saisis librement & 100\,000 avis \\
+Suivi des colis & JSON & Un message par colis : le transporteur, les étapes du suivi
+  (prise en charge, transit, livraison) et, depuis 2018, les incidents & $\approx$ 98\,200 messages \\
+Tables Silver du TP 1 & Iceberg & Commandes, articles, clients, produits, vendeurs & -- \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Les avis sont les vrais avis Olist (fichier \cmd{data/olist/olist\_order\_reviews\_dataset\_en.csv}).
+Les messages de suivi sont dans le dossier \cmd{data/olist/suivi/}, un fichier par mois. Ils ont
+été produits par le script \cmd{scripts/generer\_suivi.py} à partir des \textbf{vraies dates} de
+remise au transporteur et de livraison des commandes. Les transporteurs, les lieux de transit et
+les incidents sont simulés. Voici un message reçu en 2018 :
+
+\begin{lstlisting}[language=json,basicstyle=\ttfamily\footnotesize]
+{"colis_id": "CL0005A1A1728C", "order_id": "0005a1a1728c9d785b8e2b08b904576c",
+ "emis_le": "2018-03-29 18:17:31", "version_schema": 2,
+ "transporteur": {"nom": "Jadlog", "service": ".Package"},
+ "evenements": [
+   {"code": "PRIS_EN_CHARGE", "horodatage": "2018-03-28 00:37:42",
+    "lieu": {"ville": "Sao Paulo", "etat": "SP"}},
+   {"code": "EN_TRANSIT",   "horodatage": "2018-03-28 17:12:39", "lieu": {...}},
+   {"code": "EN_LIVRAISON", "horodatage": "2018-03-29 13:17:31", "lieu": {...}},
+   {"code": "LIVRE",        "horodatage": "2018-03-29 18:17:31", "lieu": {...}}],
+ "incidents": [{"type": "COLIS_ENDOMMAGE", "horodatage": "2018-03-28 18:49:28"}]}
+\end{lstlisting}
+
+On y trouve des \textbf{objets imbriqués} (\cmd{transporteur}, \cmd{lieu}) et des \textbf{listes}
+(\cmd{evenements}, \cmd{incidents}). Le flux a aussi les défauts habituels de ce type de source :
+son format a changé en janvier 2018 (les messages de 2017 n'ont ni \cmd{version\_schema}, ni
+\cmd{service}, ni \cmd{incidents}), certains messages sont envoyés deux fois, d'autres arrivent
+tronqués.
+
+% =====================================================================
+\section{Ce que vous allez construire}
+% =====================================================================
+
+La figure~\ref{c4:fig:pipeline} montre le pipeline du TP 2. Comme au TP 1, les données partent des
+sources, traversent les couches du Lakehouse, puis servent aux usages. Les numéros renvoient aux étapes
+décrites ci-dessous.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\small, >=Stealth,
+  barre/.style={fill=lhfonce,text=white,font=\sffamily\bfseries\small,minimum height=0.6cm,inner sep=0pt},
+  cadre/.style={draw=lhfonce,line width=0.8pt},
+  bloc/.style={draw=lhfonce!60,line width=0.6pt,fill=white},
+  et/.style={font=\sffamily\scriptsize,text=lhfonce,align=center},
+  flux/.style={->,very thick,lhfonce}]
+
+% ===== Sources =====
+\draw[cadre] (0,0) rectangle (3.2,-10.4);
+\node[barre,minimum width=3.2cm,anchor=north west] at (0,0) {Sources};
+\pic at (1.6,-3.6) {fichier=CSV};             \node[et] at (1.6,-4.45) {Avis des clients\\(CSV)};
+\pic at (1.6,-5.6) {fichier=\{ \}};            \node[et] at (1.6,-6.45) {Suivi des colis\\(JSON)};
+
+% ===== Plateforme Lakehouse =====
+\draw[draw=lhblue,line width=2.4pt] (3.9,0) rectangle (15.9,-10.4);
+\node[fill=lhblue,text=white,font=\sffamily\bfseries,minimum width=12cm,minimum height=0.7cm,anchor=north west]
+  at (3.9,0) {Plateforme Lakehouse};
+\draw[bloc] (4.35,-1.0) rectangle (15.2,-2.3);
+\node[et,font=\sffamily\bfseries\scriptsize,anchor=west] at (4.6,-1.65) {Traitement};
+\node[et,font=\sffamily\scriptsize] at (9.78,-1.65) {\logo[1.6em]{jupyter}JupyterLab\qquad\logo[1.6em]{spark}Spark\qquad\logo[1.6em]{dbt}dbt};
+
+% Tables par couche
+\pic at (5.3,-4.6)  {table=gray};      \node[et] at (5.3,-5.55)  {\textbf{landing}\\avis, suivi};
+\pic at (8.1,-4.6)  {table=lhbronze};  \node[et] at (8.1,-5.55)  {\textbf{bronze}\\2 tables};
+\pic at (10.9,-4.6) {table=lhsilver};  \node[et] at (10.9,-5.55) {\textbf{silver}\\+ tables du TP 1};
+\pic at (13.7,-4.6) {table=lhgold};    \node[et] at (13.7,-5.55) {\textbf{gold}\\constellation};
+\pic at (10.9,-6.75) {table=gray};     \node[et,anchor=west] at (11.45,-6.75) {\textbf{quarantaine}\\lignes rejetées};
+
+% Lakehouse ouvert : catalogue et stockage
+\node[fill=lhblue,text=white,font=\sffamily\bfseries\small,minimum width=10.85cm,minimum height=0.6cm]
+  at (9.78,-7.75) {Lakehouse ouvert};
+\draw[bloc] (4.35,-8.2) rectangle (7.85,-10.05);
+\node[barre,minimum width=3.5cm,anchor=north west] at (4.35,-8.2) {Catalogue};
+\node[et] at (6.1,-9.3) {\logo[1.8em]{iceberg}\\[2pt]Iceberg REST};
+\draw[bloc] (8.2,-8.2) rectangle (15.2,-10.05);
+\node[barre,minimum width=7.0cm,anchor=north west] at (8.2,-8.2) {Stockage ouvert (S3)};
+\node[et] at (9.3,-9.3)  {\logo[1.8em]{rustfs}\\[2pt]RustFS};
+\node[et] at (11.0,-9.3) {\logo[1.8em]{iceberg}\\[2pt]Iceberg};
+\node[et] at (12.6,-9.3) {\logo[1.8em]{parquet}\\[2pt]Parquet};
+\node[et] at (14.2,-9.3) {\logo[1.8em]{delta}\\[2pt]Delta Lake};
+
+% ===== Usages =====
+\draw[cadre] (16.6,0) rectangle (20.0,-3.2);
+\node at (18.3,-1.2) {\logo[2em]{spark}}; \node[et] at (18.3,-2.15) {Requêtes SQL\\(Spark SQL)};
+\draw[cadre] (16.6,-3.6) rectangle (20.0,-6.8);
+\node at (18.3,-4.8) {\logo[2em]{sklearn}}; \node[et] at (18.3,-5.75) {Analyse\\du texte};
+\draw[cadre] (16.6,-7.2) rectangle (20.0,-10.4);
+\node at (18.3,-8.4) {\logo[2em]{streamlit}}; \node[et] at (18.3,-9.35) {Tableau\\de bord};
+
+% ===== Infrastructure =====
+\node[fill=lhfonce,text=white,minimum width=20cm,minimum height=0.75cm,anchor=north west] at (0,-10.8)
+  {\logo[1.3em]{docker}\textbf{Infrastructure : conteneurs Docker}};
+
+% ===== Flux =====
+\draw[very thick,lhfonce] (3.2,-3.6) -| (4.4,-4.6) node[pastille,pos=0.15]{1};
+\draw[very thick,lhfonce] (3.2,-5.6) -| (4.4,-4.6) node[pastille,pos=0.15]{2};
+\draw[flux] (4.4,-4.6) -- (4.85,-4.6);
+\draw[flux] (5.75,-4.6) -- (7.65,-4.6) node[pastille,midway]{3};
+\draw[flux] (8.55,-4.6) -- (10.45,-4.6) node[pastille,midway]{4};
+\draw[flux] (10.9,-5.95) -- (10.9,-6.2) node[pastille,right=2pt]{5};
+\draw[flux] (11.35,-4.6) -- (13.25,-4.6) node[pastille,midway]{6};
+\node[et,above=5pt] at (12.3,-4.6) {dbt};
+\draw[very thick,lhfonce] (14.15,-4.6) -- (15.55,-4.6);
+\draw[flux] (15.55,-4.6) |- (16.6,-1.6) node[pastille,pos=0.75]{7};
+\draw[<->,very thick,lhfonce] (15.55,-5.2) -- (16.6,-5.2) node[pastille,midway,below=3pt]{8};
+\draw[flux] (15.55,-4.6) |- (16.6,-8.8) node[pastille,pos=0.75]{9};
+\end{tikzpicture}}
+\caption{Pipeline du TP 2. Tous les services tournent dans des conteneurs Docker.}
+\label{c4:fig:pipeline}
+\end{figure}
+
+\subsection*{Le pipeline, étape par étape}
+
+\begin{description}[leftmargin=1.4em,labelindent=0pt,itemsep=3pt,font=\normalfont]
+\item[\etape{1}] \textbf{Dépôt des avis} (\nb{01\_bronze\_avis\_suivi}) : le fichier CSV des avis est copié tel quel dans
+  \cmd{s3://landing/olist/avis/}.
+\item[\etape{2}] \textbf{Dépôt du suivi} (\nb{01\_bronze\_avis\_suivi}) : les messages des transporteurs, un fichier par mois et un
+  message JSON par ligne, sont copiés dans la zone d'atterrissage (\cmd{suivi/}).
+\item[\etape{3}] \textbf{Ingestion en Bronze} (\nb{01\_bronze\_avis\_suivi}) : Spark lit les avis en texte, en autorisant les
+  commentaires sur plusieurs lignes, et garde chaque message JSON \emph{comme un texte}, sans le
+  découper. Les deux tables reçoivent les colonnes \cmd{\_source} et \cmd{\_ingere\_le}.
+\item[\etape{4}] \textbf{Nettoyage} (\nb{02\_silver\_texte\_json}) : les avis sont typés et leur
+  commentaire est normalisé (minuscules, sans accents ni ponctuation). Les messages JSON sont lus avec
+  un schéma écrit à l'avance, dédoublonnés, puis \og dépliés \fg{} : une ligne par colis et une
+  ligne par étape du suivi.
+\item[\etape{5}] \textbf{Quarantaine} (\nb{02\_silver\_texte\_json}) : les avis dont la commande est inconnue et les messages
+  tronqués sont isolés.
+\item[\etape{6}] \textbf{Modélisation avec dbt} (\nb{03\_gold\_dbt\_etoile}) : un projet dbt construit le schéma en constellation à partir
+  des tables Silver des TP 1 et 2, puis vérifie chaque table par des tests de qualité.
+\item[\etape{7}] \textbf{Analyse} (\nb{03\_gold\_dbt\_etoile}) : des requêtes SQL sur ce schéma répondent aux questions de la direction.
+\item[\etape{8}] \textbf{Analyse du texte} (\nb{04\_nlp\_avis}) : un modèle apprend à reconnaître un avis négatif à partir
+  de son commentaire, puis écrit ses prédictions dans \cmd{gold.avis\_sentiment}.
+\item[\etape{9}] \textbf{Restitution} (\nb{dashboard\_tp2.py}) : le tableau de bord présente la satisfaction des clients et
+  permet de tester le modèle sur un nouveau commentaire.
+\end{description}
+
+Il s'agit toujours d'un pipeline \textbf{ELT}. Les étapes \etape{1} à \etape{3} extraient et chargent
+sans rien transformer, et toutes les transformations (\etape{4} à \etape{8}) ont lieu dans le Lakehouse.
+
+\subsection*{La couche Gold en schéma en constellation}
+
+Au TP 1, la couche Gold était une table large, \cmd{gold.commandes}. Elle est remplacée ici par une
+\textbf{modélisation dimensionnelle} (figure~\ref{c4:fig:constellation}), qui distingue deux sortes de tables :
+
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+\item Une table de \textbf{faits} enregistre des événements mesurables (une vente, un avis, une
+  livraison). Son \textbf{grain} dit ce que représente une ligne.
+\item Une table de \textbf{dimensions} décrit le contexte qui sert à filtrer et à regrouper (quand,
+  qui, quoi). Chaque fait la désigne par une \textbf{clé}.
+\end{itemize}
+
+Une table de faits entourée de ses dimensions forme un \textbf{schéma en étoile}. Ici, il y a
+\emph{trois} tables de faits, qui partagent les dimensions \cmd{dim\_date} et \cmd{dim\_client} (des
+\emph{dimensions conformes}). Trois étoiles reliées entre elles forment un \textbf{schéma en
+constellation} (\emph{fact constellation}, ou \emph{galaxy schema}). Une même question (\og par état
+du client \fg{}, \og par mois \fg{}) se pose ainsi de la même façon aux ventes, aux avis et aux
+livraisons. Le projet dbt s'appelle \cmd{dbt\_etoile} car chaque fait y est modélisé en étoile.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\sffamily\small, >=Stealth,
+  fait/.style={draw=lhgold,thick,rounded corners=3pt,fill=lhgold!12,text width=3.6cm,align=left,
+               inner sep=5pt,font=\sffamily\footnotesize},
+  dim/.style={draw=lhblue,thick,rounded corners=3pt,fill=lhblue!6,text width=3.0cm,align=left,
+              inner sep=5pt,font=\sffamily\footnotesize},
+  lien/.style={thick,lhblue!70}]
+\node[fait] (fv) at (0,0)    {\textbf{fait\_ventes}\\ \textit{grain : un article}\\[2pt] \texttt{prix}, \texttt{frais\_port}\\ \texttt{statut}, \texttt{en\_retard}};
+\node[fait] (fa) at (5.0,0)  {\textbf{fait\_avis}\\ \textit{grain : un avis}\\[2pt] \texttt{note}, \texttt{est\_negatif}\\ \texttt{nb\_mots}, \texttt{en\_retard}};
+\node[fait] (fl) at (10.0,0) {\textbf{fait\_livraisons}\\ \textit{grain : un colis}\\[2pt] \texttt{transporteur}\\ \texttt{nb\_incidents}, \texttt{duree}};
+
+\node[dim] (dp) at (-1.3,3.1) {\textbf{dim\_produit}\\ \underline{\texttt{product\_id}}\\ \texttt{categorie}};
+\node[dim] (dv) at (2.4,3.1)  {\textbf{dim\_vendeur}\\ \underline{\texttt{seller\_id}}\\ \texttt{ville}, \texttt{etat}};
+\node[dim] (dc) at (8.4,3.1)  {\textbf{dim\_client}\\ \underline{\texttt{customer\_id}}\\ \texttt{ville}, \texttt{etat}};
+\node[dim] (dd) at (5.0,-3.1) {\textbf{dim\_date}\\ \underline{\texttt{date\_id}}\\ \texttt{annee\_mois}, \dots};
+
+\draw[lien] (dp.south) -- ([xshift=-8mm]fv.north);
+\draw[lien] (dv.south) -- ([xshift=8mm]fv.north);
+\draw[lien] (dc.south) -- (fv.north east);
+\draw[lien] (dc.south) -- (fa.north);
+\draw[lien] (dc.south) -- (fl.north);
+\draw[lien] (dd.north) -- (fv.south);
+\draw[lien] (dd.north) -- (fa.south);
+\draw[lien] (dd.north) -- (fl.south);
+\end{tikzpicture}
+\caption{Le schéma en constellation de la couche Gold : trois tables de faits (en jaune) reliées aux
+dimensions (en bleu) par leurs clés (soulignées). Chaque fait garde aussi le numéro de commande
+(\texttt{order\_id}), qui permet de rapprocher deux faits, avec prudence, car leurs grains sont différents.}
+\label{c4:fig:constellation}
+\end{figure}
+
+\begin{center}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{2.2cm} X X@{}}
+\toprule
+\normalfont\textbf{Couche} & \textbf{Rôle} & \textbf{Règle d'or} \\
+\midrule
+Bronze & Copie des sources, JSON compris, avec \cmd{\_source} et \cmd{\_ingere\_le} &
+  On ne découpe pas, on ne corrige pas, et un message tronqué est gardé tel quel. \\
+Silver & Données typées, dédoublonnées, dépliées, texte normalisé &
+  Le schéma est écrit, jamais deviné. Une ligne invalide va en quarantaine. \\
+Gold & Schéma en constellation, construit et testé par dbt &
+  Chaque table a un grain clair et passe ses tests avant d'être utilisée. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% =====================================================================
+\section{Déroulé}
+% =====================================================================
+
+\textbf{Avant de commencer, récupérez les énoncés et copiez-les dans votre dossier personnel.} Dans
+JupyterLab, ouvrez un terminal (\emph{File > New > Terminal}) et tapez :
+\begin{lstlisting}[style=shell]
+git pull
+cp -r notebooks/tp2 notebooks/mon_travail/
+cp apps/dashboard_tp2.py notebooks/mon_travail/tp2/
+\end{lstlisting}
+Le dossier \nb{notebooks/mon\_travail/tp2/} contient alors les quatre notebooks, le projet dbt
+\nb{dbt\_etoile/} et le tableau de bord. Travaillez uniquement dans ce dossier, et exécutez les
+notebooks \textbf{dans l'ordre}. Les cellules marquées \cmd{\# À COMPLÉTER} sont à écrire. Dans le
+projet dbt, ce sont les fichiers qui portent la mention \cmd{-{}- À COMPLÉTER}.
+
+\begin{attention}[Un seul processus Spark à la fois]
+un notebook ouvert, une commande \cmd{dbt} et le tableau
+de bord démarrent chacun leur propre session Spark. Avant de passer de l'un à l'autre, arrêtez les
+noyaux des notebooks (panneau \emph{Running Terminals and Kernels} > \emph{Shut Down All}).
+\end{attention}
+
+L'aide-mémoire de l'annexe~\ref{ann:aide} rassemble les fonctions Spark et les commandes dbt de ce TP.
+
+% =====================================================================
+\section{Partie par partie}
+% =====================================================================
+
+\subsection*{Partie 1 -- Bronze \hfill \nb{01\_bronze\_avis\_suivi}}
+
+Vous déposez les deux sources dans la zone d'atterrissage, vous mesurez le piège des retours à la
+ligne dans les commentaires, puis vous écrivez les tables \cmd{bronze.avis} et \cmd{bronze.suivi\_brut}.
+
+\begin{notion}[Un CSV n'a pas toujours un enregistrement par ligne]\index{csv multiligne@CSV multiligne}
+quand un client écrit son commentaire
+sur plusieurs lignes, le retour à la ligne se trouve \emph{entre guillemets}, à l'intérieur du champ.
+Une lecture naïve le prend pour une fin d'enregistrement et coupe l'avis en morceaux. L'option
+\cmd{multiLine} de Spark respecte les guillemets.
+\end{notion}
+
+\begin{notion}[Garder le JSON brut]\index{json@JSON}
+en Bronze, chaque message est stocké comme un simple texte. Si le
+transporteur change de format, l'ingestion continue de fonctionner, et un message mal formé n'est
+jamais perdu. Le découpage se fait en Silver.
+\end{notion}
+
+\begin{resultat}
+\cmd{bronze.avis} contient exactement 100\,000 avis, avec des notes de 1 à 5 uniquement (la lecture
+naïve en trouvait davantage). \cmd{bronze.suivi\_brut} contient environ 98\,200 messages.
+\end{resultat}
+
+\capture{tp2_01_notebook}{Notebook \texttt{01\_bronze\_avis\_suivi} : lecture naïve et lecture multi-lignes des avis.}{c4:fig:nb01}
+\capture{tp2_01_resultat}{Résultat attendu de la partie 1 : le bilan des deux tables Bronze.}{c4:fig:res01}
+
+\subsection*{Partie 2 -- Silver \hfill \nb{02\_silver\_texte\_json}}
+
+Vous trouvez la bonne clé des avis, vous normalisez leur texte, puis vous découpez les messages JSON
+en deux tables : une ligne par colis dans la première, une ligne par étape du suivi dans la seconde.
+
+\begin{notion}[Lire le JSON avec un schéma écrit]\index{schema explicite@schéma explicite}
+\cmd{F.from\_json(colonne, schema)} transforme le texte
+en structure. Le schéma couvre les deux versions du format, et un champ absent vaut \cmd{null}. On
+accède ensuite aux champs imbriqués par un point (\cmd{transporteur.nom}) et aux éléments d'une liste
+par leur position (\cmd{incidents[0]}).
+\end{notion}
+
+\begin{notion}[Déplier une liste]\index{explode}
+\cmd{F.explode} crée une ligne par élément d'une liste
+(figure~\ref{c4:fig:explode}). C'est ainsi qu'un message imbriqué devient une table.
+\end{notion}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\sffamily\footnotesize, >=Stealth,
+  b/.style={draw=#1,thick,rounded corners=3pt,fill=#1!7,align=left,inner sep=5pt}]
+\node[b=lhbronze,text width=4.6cm] (m) at (0,0) {\textbf{un message} (une ligne)\\[3pt]
+  \texttt{colis\_id} : \texttt{CL0005A1A1728C}\\[1pt]
+  \texttt{evenements} : [\\
+  \quad \texttt{PRIS\_EN\_CHARGE},\\ \quad \texttt{EN\_TRANSIT},\\ \quad \texttt{EN\_LIVRAISON},\\ \quad \texttt{LIVRE} ]};
+\node[b=lhsilver,text width=6.4cm] (t) at (8.2,0) {\textbf{suivi\_evenements} (quatre lignes)\\[3pt]
+  \scriptsize\ttfamily
+  \begin{tabular}{@{}lll@{}}
+  CL0005A1A1728C & PRIS\_EN\_CHARGE & 28/03 \\
+  CL0005A1A1728C & EN\_TRANSIT     & 28/03 \\
+  CL0005A1A1728C & EN\_LIVRAISON   & 29/03 \\
+  CL0005A1A1728C & LIVRE           & 29/03 \\
+  \end{tabular}};
+\draw[->,thick] (m) -- node[above]{\texttt{F.explode}} (t);
+\end{tikzpicture}
+\caption{\texttt{F.explode} : une liste de quatre événements devient quatre lignes, et les colonnes du
+message (\texttt{colis\_id}) sont répétées sur chaque ligne.}
+\label{c4:fig:explode}
+\end{figure}
+
+\begin{attention}
+sur une liste \cmd{null} (un message de 2017, sans \cmd{incidents}), \cmd{F.size} renvoie \cmd{-1},
+et non \cmd{0}. Ce genre de détail fausse une moyenne sans provoquer d'erreur. Il faut donc le traiter
+explicitement, et le tester (partie 3).
+\end{attention}
+
+\begin{resultat}
+le bilan explique chaque écart entre Bronze et Silver, avec quelques avis orphelins (leur commande est
+en quarantaine depuis le TP 1), environ 200 messages tronqués et environ 600 messages reçus deux
+fois. \cmd{silver.suivi\_colis} compte environ 97\,450 colis, \cmd{silver.suivi\_evenements} environ
+450\,000 étapes.
+\end{resultat}
+
+\capture{tp2_02_notebook}{Notebook \texttt{02\_silver\_texte\_json} : lecture du JSON avec un schéma explicite.}{c4:fig:nb02}
+\capture{tp2_02_resultat}{Résultat attendu de la partie 2 : le bilan Bronze / Silver.}{c4:fig:res02}
+
+\subsection*{Partie 3 -- Gold avec dbt \hfill \nb{03\_gold\_dbt\_etoile}}
+
+Vous complétez le projet dbt (un modèle de dimension, deux modèles de faits et leurs tests), vous
+construisez toute la couche Gold avec \cmd{dbt build}, puis vous interrogez ces tables en SQL.
+
+\begin{notion}[dbt (\emph{data build tool})]\index{dbt}
+chaque table Gold est décrite par un fichier SQL qui contient
+une simple requête \cmd{SELECT}, appelé \emph{modèle}. dbt en fait une table, dans le bon ordre, car il
+déduit les dépendances des expressions \cmd{\{\{ source(...) \}\}} (une table Silver) et
+\cmd{\{\{ ref(...) \}\}} (un autre modèle). Les \textbf{tests} (\cmd{unique}, \cmd{not\_null},
+\cmd{accepted\_values}, \cmd{relationships}, ou une requête SQL qui renvoie les lignes en erreur)
+sont lancés juste après la construction de chaque table. Si l'un échoue, les tables qui en
+dépendent ne sont pas construites. Le projet, versionné comme du code, documente lui-même la couche
+Gold.
+\end{notion}
+
+\needspace{22\baselineskip}
+\paragraph{Le projet \cmd{dbt\_etoile}.} Il se trouve dans \cmd{notebooks/mon\_travail/tp2/dbt\_etoile/}.
+Les fichiers marqués \og à compléter \fg{} contiennent des trous :
+
+\begin{lstlisting}[style=shell]
+dbt_etoile/
+|-- dbt_project.yml       # configuration : tables Iceberg dans lakehouse.gold
+|-- models/
+|   |-- sources.yml       # tables Silver lues par le projet
+|   |-- schema.yml        # colonnes et tests                  <- à compléter
+|   |-- dimensions/
+|   |   |-- dim_date.sql     dim_client.sql     dim_vendeur.sql
+|   |   `-- dim_produit.sql                                    <- à compléter
+|   `-- faits/
+|       |-- fait_ventes.sql
+|       |-- fait_avis.sql                                      <- à compléter
+|       `-- fait_livraisons.sql                                <- à compléter
+|-- tests/                # tests SQL : renvoient les lignes en erreur
+|   |-- fait_ventes_grain_unique.sql
+|   `-- nb_incidents_positif.sql
+`-- target/               # créé par dbt (SQL compilé, documentation)
+\end{lstlisting}
+
+La connexion à Spark est déjà configurée dans l'image (\cmd{profiles.yml}), et \cmd{dbt debug
+-{}-connection} doit répondre \cmd{All checks passed!}. Les commandes se lancent depuis le notebook
+(préfixe \cmd{!}) ou depuis un terminal JupyterLab :
+
+\begin{lstlisting}[style=shell]
+cd notebooks/mon_travail/tp2
+dbt build --project-dir dbt_etoile            # tous les modèles et tous les tests
+dbt run   --project-dir dbt_etoile --select fait_avis   # un seul modèle
+\end{lstlisting}
+
+\begin{resultat}
+\cmd{dbt build} se termine par \cmd{Completed successfully} et \cmd{PASS=31}, soit 7 modèles et 24 tests
+(22 déclarés dans \cmd{schema.yml}, 2 écrits en SQL dans \cmd{tests/}). Environ 55~\% des avis sont
+négatifs quand la livraison est en retard, contre environ 10~\% sinon.
+\end{resultat}
+
+\capture{tp2_03_dbt_build}{Résultat attendu de \texttt{dbt build} : 7 modèles et 24 tests, sans erreur (\texttt{PASS=31}).}{c4:fig:dbtbuild}
+\paragraph{Consulter le graphe des dépendances (\emph{lineage}).} dbt génère un site de
+documentation, avec la description de chaque table et de chaque colonne, le SQL, les tests et le graphe
+des dépendances. Pour le consulter :
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Lancez la cellule \cmd{!dbt docs generate -{}-static -{}-project-dir dbt\_etoile} du notebook.
+        Elle crée un fichier unique, \cmd{dbt\_etoile/target/static\_index.html}.
+  \item Dans l'explorateur de fichiers de JupyterLab, ouvrez \cmd{dbt\_etoile/target/}, faites un
+        clic droit sur \cmd{static\_index.html} puis \emph{Open in New Browser Tab}.
+  \item Dans la page qui s'ouvre, cliquez sur un modèle (par exemple \cmd{fait\_avis}) dans le menu
+        de gauche, puis sur l'icône bleue \emph{View Lineage Graph}, en bas à droite.
+  \item Le graphe montre les tables Silver (sources, en vert) à gauche et les modèles Gold à droite.
+        Le champ \emph{-{}-select} en bas de la fenêtre filtre le graphe, par exemple
+        \cmd{+fait\_avis} pour ne voir que ce dont \cmd{fait\_avis} dépend.
+\end{enumerate}
+Le graphe s'arrête aux tables Silver, car les couches Bronze et Silver sont construites par Spark, pas
+par dbt, qui ne les connaît que comme des \emph{sources} déclarées dans \cmd{sources.yml}. Relancez
+\cmd{dbt docs generate} après chaque modification du projet, puis actualisez la page.
+
+\capture{tp2_03_lineage}{La documentation générée par dbt : le graphe des dépendances (\emph{lineage}) de la couche Gold.}{c4:fig:lineage}
+\capture{tp2_03_resultat}{Résultat attendu de la partie 3 : avis négatifs selon le retard de livraison (question Q1).}{c4:fig:res03}
+
+\begin{attention}[Deux pièges à éviter]
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+\item \textbf{Une corrélation n'est pas une cause} : les colis qui ont subi un incident reçoivent de
+  moins bonnes notes, mais ils sont aussi plus souvent en retard. Le notebook vous fait refaire la
+  comparaison \emph{à retard égal} pour démasquer cette \textbf{variable de confusion}.
+\item \textbf{Une jointure entre deux faits de grains différents multiplie les lignes} : une commande
+  de trois articles a trois lignes dans \cmd{fait\_ventes}, et son avis est compté trois fois. Le
+  notebook vous fait trouver et corriger ce piège.
+\end{itemize}
+\end{attention}
+
+\subsection*{Partie 4 -- Analyse du texte \hfill \nb{04\_nlp\_avis}}
+
+Vous entraînez un modèle qui estime, à partir du commentaire, la probabilité qu'un avis soit
+négatif (note 1 ou 2). Vous l'interprétez, vous étudiez ses erreurs, puis vous écrivez ses
+prédictions dans \cmd{gold.avis\_sentiment}.
+
+\begin{notion}[TF-IDF]\index{tf-idf@TF-IDF}
+pour qu'un modèle lise du texte, chaque commentaire devient un vecteur, avec un poids
+par terme du vocabulaire. Ce poids est élevé quand le terme est fréquent \emph{dans ce commentaire}
+et rare \emph{dans l'ensemble des commentaires}. Les termes peuvent être des mots seuls ou des groupes
+de deux mots (\emph{n-grammes}), car \og not recommend \fg{} ne dit pas la même chose que
+\og recommend \fg{}. Une régression logistique apprend ensuite un coefficient par terme, et le modèle
+reste lisible.
+\end{notion}
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\sffamily\footnotesize, >=Stealth, node distance=0.9cm,
+  b/.style={draw=#1,thick,rounded corners=3pt,fill=#1!7,align=center,inner sep=5pt,text width=3.0cm,minimum height=1.5cm}]
+\node[b=gray] (a) {\og I do NOT recommend!!\\ Arrived broken. \fg{}};
+\node[b=lhsilver,right=of a] (b) {texte normalisé\\[2pt] \texttt{\scriptsize i do not recommend arrived broken}};
+\node[b=lhblue,right=of b] (c) {vecteur TF-IDF\\[2pt] \scriptsize not recommend : 0,52\\ broken : 0,48\\ \dots};
+\node[b=lhblue,right=of c] (d) {régression\\ logistique};
+\node[b=lhgold,right=of d] (e) {probabilité d'un\\ avis négatif :\\ \textbf{0,98}};
+\draw[->,thick] (a) -- (b);
+\draw[->,thick] (b) -- (c);
+\draw[->,thick] (c) -- (d);
+\draw[->,thick] (d) -- (e);
+\end{tikzpicture}}
+\caption{Du commentaire à la prédiction : normalisation (partie 2), vectorisation TF-IDF, puis
+classification. Les valeurs sont données à titre d'illustration.}
+\label{c4:fig:tfidf}
+\end{figure}
+
+\begin{attention}
+les listes de \emph{mots vides} (articles, pronoms, prépositions\dots) toutes faites contiennent
+souvent la négation. Celle de scikit-learn retire \og not \fg{}, \og no \fg{} et \og never \fg{}. Avec
+elle, \og i do not recommend \fg{} devient \og recommend \fg{} et passe pour un avis positif, ce que le
+notebook vous fait constater.
+\end{attention}
+
+\begin{resultat}
+une AUC ROC d'environ 0,96 et un rappel d'environ 90~\% sur les avis négatifs. Le client écrit
+lui-même ce qui ne va pas, la tâche est donc bien plus facile que la prévision des retards du TP 1.
+\end{resultat}
+
+\capture{tp2_04_notebook}{Notebook \texttt{04\_nlp\_avis} : entraînement et évaluation du modèle TF-IDF.}{c4:fig:nb04}
+\capture{tp2_04_resultat}{Résultat attendu de la partie 4 : les termes qui pèsent le plus vers un avis négatif ou positif.}{c4:fig:res04}
+
+% =====================================================================
+\section{Le tableau de bord}\label{c4:sec:dashboard}
+% =====================================================================
+
+Ouvrez \nb{notebooks/mon\_travail/tp2/dashboard\_tp2.py} dans JupyterLab. Les requêtes sur la couche Gold
+et le filtre de période sont fournis. Complétez les cinq éléments demandés :
+
+\begin{enumerate}[leftmargin=*,nosep]
+  \item une ligne de quatre indicateurs : note moyenne, part d'avis négatifs, part d'avis commentés,
+        part des colis avec incident ;
+  \item la part d'avis négatifs, mois par mois ;
+  \item la part d'avis négatifs selon que la livraison était à l'heure ou en retard ;
+  \item la part de colis avec incident, par transporteur ;
+  \item une zone où l'on saisit un commentaire et où le modèle de la partie 4 affiche sa probabilité
+        d'être négatif, suivie des avis à traiter en priorité.
+\end{enumerate}
+
+Arrêtez les noyaux des notebooks, puis lancez le tableau de bord depuis un terminal :
+\begin{lstlisting}[style=shell]
+streamlit run notebooks/mon_travail/tp2/dashboard_tp2.py --server.address 0.0.0.0
+\end{lstlisting}
+Ouvrez ensuite \url{http://localhost:8501} dans votre navigateur.
+
+\begin{astuce}
+inutile de relancer Streamlit à chaque modification. Enregistrez le fichier dans JupyterLab
+(\cmd{Ctrl+S}) : un bandeau \emph{Source file changed} apparaît en haut à droite de la page. Cliquez
+sur \emph{Always rerun} : la page se met alors à jour à chaque enregistrement. De même, chaque
+action dans la page (changer la période, saisir un commentaire) réexécute tout le script de haut en
+bas. C'est le fonctionnement normal de Streamlit. Les résultats des requêtes sont gardés en cache
+cinq minutes (\cmd{@st.cache\_data}). Pour forcer leur relecture, ouvrez le menu \emph{\(\vdots\)} >
+\emph{Clear cache}, puis tapez \cmd{R}. Pour arrêter le tableau de bord, faites \cmd{Ctrl+C} dans le terminal.
+\end{astuce}
+
+\capture{tp2_dashboard_haut}{Tableau de bord attendu : les indicateurs, l'évolution mensuelle et l'effet des retards.}{c4:fig:dash1}
+\capture{tp2_dashboard_bas}{Tableau de bord attendu : les transporteurs et le test d'un commentaire par le modèle.}{c4:fig:dash2}
+
+% =====================================================================
+\section{Synthèse}\label{c4:sec:livrables}
+% =====================================================================
+
+Pour faire le point, rédigez une synthèse de ce TP. Elle ne recopie pas le code mais explique
+vos choix et vos résultats. Elle couvre :
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Architecture} : le schéma de votre pipeline, et ce qui change par rapport au TP 1
+        quand les données ne sont pas structurées.
+  \item \textbf{Ingestion et qualité} : le piège du CSV multi-lignes, le choix de garder le JSON brut,
+        la clé des avis, les règles de quarantaine et le bilan Bronze / Silver.
+  \item \textbf{Schéma en constellation} : le grain de chaque fait, le rôle des dimensions, une capture du
+        \emph{lineage} dbt, les tests que vous avez écrits et ce qu'ils protègent.
+  \item \textbf{Réponses à la direction} : les résultats des requêtes SQL, interprétés.
+  \item \textbf{Analyse du texte} : la méthode, les métriques, les termes qui pèsent le plus, l'effet
+        des mots vides et l'analyse des erreurs.
+  \item \textbf{Tableau de bord} : une capture d'écran et deux ou trois enseignements.
+  \item \textbf{Réponses aux questions} des notebooks, rédigées et argumentées.
+  \item \textbf{Limites et améliorations} : ce que vous feriez avec plus de temps, ou en production
+        (par exemple des modèles de langue pré-entraînés, ou le traitement des avis mixtes).
+\end{enumerate}
+
+\begin{aretenir}
+  \item Un fichier CSV peut contenir des retours à la ligne dans un champ : il se lit avec l'option \cmd{multiLine}.
+  \item On garde le JSON brut en Bronze, puis on le lit en Silver avec un schéma écrit, qui couvre toutes les versions du format.
+  \item \cmd{explode} déplie une liste : un message devient autant de lignes que d'événements.
+  \item dbt organise les transformations SQL en modèles versionnés, testés et documentés, et en déduit le lineage.
+  \item Un schéma en constellation partage ses dimensions entre plusieurs tables de faits.
+  \item TF-IDF transforme un texte en vecteur de nombres, utilisable par un modèle de classification.
+\end{aretenir}
+
+\begin{plusloin}
+La documentation de dbt (\url{https://docs.getdbt.com}) présente les tests, les sources et la documentation générée. \citet{kimball2013} détaille les dimensions conformes, qui rendent possible un schéma en constellation.
+\end{plusloin}
