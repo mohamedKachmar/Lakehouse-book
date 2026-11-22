@@ -13,3 +13,4 @@
 *.synctex.gz
 # PDF de compilation (ouvrage.pdf, ouvrage_v2.pdf, ...)
 *.pdf
+__pycache__/
