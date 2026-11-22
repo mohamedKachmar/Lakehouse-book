@@ -26,6 +26,10 @@ CHAPITRES = [
             ("Scripts de préparation des données, réservés à l'enseignant.", "Scripts qui ont servi à préparer les données des TP."),
             ("\\section{Installer l'environnement du cours}", "\\section{Installer l'environnement des travaux pratiques}"),
             ("Étape 1 -- Récupérer le dossier du cours", "Étape 1 -- Récupérer le dépôt d'accompagnement"),
+            # Mise en page de l'ouvrage : le titre avant la figure, la figure placée ici
+            ("\n\\subsection*{Le trajet d'une donnée}\n", ""),
+            ("\\begin{figure}[h]\n\\centering\n\\resizebox",
+             "\\needspace{22\\baselineskip}\n\\subsection*{Le trajet d'une donnée}\n\n\\begin{figure}[H]\n\\centering\n\\resizebox"),
         ],
         "supprimer": [
             r"\n% =+\n\\section\{Avant la séance 1\}.*\Z",

@@ -149,6 +149,7 @@ Exécutions de DAG en échec & airflow\_execution\_dag\_duree\_secondes\_count\{
 \midrule
 \multicolumn{2}{@{}l}{\textbf{\textcolor{lhblue}{Services et rejeu}}} \\
 Démarrer Kafka et Kafka UI & docker compose -{}-profile streaming up -d kafka kafka-ui \\
+Démarrer Airflow (partie 5) & docker compose -{}-profile orchestration up -d airflow \\
 Rejouer un mois dans Kafka & python /opt/lakehouse/scripts/rejouer\_suivi.py -{}-depuis 2018-03-01 -{}-jusqu-a 2018-04-01 \\
 Plus vite, ou d'un coup & \dots{} -{}-jours-par-seconde 5 \quad \dots{} -{}-sans-pause \\
 Dans un dossier & \dots{} -{}-dossier s3://landing/flux/suivi \\
